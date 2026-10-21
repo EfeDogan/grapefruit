@@ -295,6 +295,24 @@ h2 { margin-bottom: 24px; font-size: clamp(40px, 5vw, 68px); line-height: 1.04; 
 .privacy-orbit i { position: absolute; inset: 80px; border: 1px solid rgba(255,255,255,.07); border-radius: 50%; }
 .privacy-orbit i:last-child { inset: 160px; }
 
+.downloads { padding-top: 140px; }
+.download-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.download-card { min-height: 430px; padding: 36px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 30px; overflow: hidden; }
+.download-card.windows { color: #fff9f2; background: var(--ink); }
+.download-card.linux { color: #412f2b; background: linear-gradient(145deg, #f7a185, #f4c5ab); }
+.download-card-top { margin-bottom: auto; display: flex; align-items: flex-start; justify-content: space-between; }
+.download-mark { width: 64px; height: 64px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 19px; font-size: 24px; font-weight: 800; opacity: .9; }
+.release-badge { padding: 8px 10px; border: 1px solid currentColor; border-radius: 999px; font: 500 9px "DM Mono", monospace; letter-spacing: .1em; opacity: .7; }
+.download-card > p { margin: 38px 0 8px; font: 500 10px "DM Mono", monospace; letter-spacing: .14em; opacity: .65; }
+.download-card h3 { margin: 0 0 8px; font-size: clamp(27px, 3vw, 40px); letter-spacing: -.05em; }
+.download-meta { margin-bottom: 24px; font-size: 12px; opacity: .68; }
+.download-card .button { width: fit-content; margin-bottom: 18px; }
+.download-card.windows .button { color: var(--ink); background: #fff8ef; box-shadow: none; }
+.download-card.linux .button { color: #fff; background: var(--ink); box-shadow: none; }
+.download-card small { max-width: 510px; font-size: 11px; line-height: 1.6; opacity: .7; }
+.download-note { margin: 24px 3px 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.download-note a { color: var(--ink); font-weight: 700; }
+
 .platforms .section-heading { max-width: 900px; }
 .platform-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .platform-card { min-height: 185px; padding: 30px; display: grid; grid-template-columns: 74px 1fr; gap: 25px; align-items: center; border: 1px solid var(--line); border-radius: 25px; background: rgba(255,255,255,.54); }
@@ -352,13 +370,15 @@ h2 { margin-bottom: 24px; font-size: clamp(40px, 5vw, 68px); line-height: 1.04; 
   .trust-strip div { padding: 0 13px; }
   .section { width: calc(100% - 32px); padding: 80px 0; }
   .story { padding-top: 90px; }
-  .steps, .format-grid, .platform-grid { grid-template-columns: 1fr; }
+  .steps, .format-grid, .download-grid, .platform-grid { grid-template-columns: 1fr; }
   .step-card:nth-child(2), .step-card:nth-child(2).is-visible { transform: none; }
   .section-heading.split { gap: 5px; }
   .format-card { min-height: 300px; }
   .actions-section { gap: 25px; }
   .privacy-panel { min-height: 620px; padding: 48px 28px; border-radius: 28px; }
   .privacy-panel h2 { font-size: 44px; }
+  .download-card { min-height: 410px; padding: 28px; }
+  .download-card .button { width: 100%; }
   .platform-card { grid-template-columns: 62px 1fr; padding: 22px; }
   .platform-mark { width: 62px; height: 62px; border-radius: 18px; }
   .final-cta { width: calc(100% - 26px); padding: 70px 20px; border-radius: 28px; }

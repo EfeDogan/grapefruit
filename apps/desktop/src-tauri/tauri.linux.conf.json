@@ -15,6 +15,15 @@
           "libreoffice-draw-nogui",
           "libreoffice-calc-nogui"
         ],
+        "recommends": [
+          "gnome-shell",
+          "python3-nautilus"
+        ],
+        "files": {
+          "/usr/share/gnome-shell/extensions/grapefruit@io.github.efedogan": "../../../integrations/gnome-shell/grapefruit@io.github.efedogan/",
+          "/usr/share/nautilus-python/extensions/grapefruit.py": "../../../integrations/nautilus/grapefruit.py",
+          "/usr/share/doc/io-github-efedogan-grapefruit/README.integration.md": "../../../integrations/README.md"
+        },
         "desktopTemplate": "linux/grapefruit.desktop.hbs"
       },
       "rpm": {

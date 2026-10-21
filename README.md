@@ -81,7 +81,19 @@ cargo run -p file-formatter-cli -- capabilities rapor.docx sunum.pptx
 cargo run -p file-formatter-cli -- convert --to pdf rapor.docx
 ```
 
-### Windows kurulum paketi
+### Hazır kurulum paketleri
+
+Hazır preview paketleri:
+
+- [Windows x64 `.exe`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.0/Grapefruit_0.3.0_x64-setup.exe)
+- [Ubuntu/Debian amd64 `.deb`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.0/Grapefruit_0.3.0_amd64.deb)
+- [Sürüm notları ve SHA-256 değerleri](https://github.com/EfeDogan/grapefruit/releases/tag/v0.3.0)
+
+Linux paketi GNOME Shell ve Nautilus bütünleştirme dosyalarını sistem genelinde
+kurar. GNOME uzantısını kurulumdan sonra kullanıcı hesabında etkinleştirmek
+gerekir.
+
+Windows paketini yerelde üretmek için:
 
 PowerShell 7 üzerinden sabit sürümlü ve SHA-256 doğrulamalı FFmpeg/Poppler
 araçlarını hazırlayıp NSIS paketi oluşturabilirsin:
