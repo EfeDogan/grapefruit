@@ -1,4 +1,6 @@
-use std::{path::PathBuf, sync::Mutex};
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
+use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
@@ -625,6 +627,7 @@ fn present_overlay(app: &AppHandle, mode: OverlayMenuMode) -> Result<(), String>
     present_overlay_mode(app, mode)
 }
 
+#[cfg(target_os = "linux")]
 fn present_overlay_with_selection(
     app: &AppHandle,
     mode: OverlayMenuMode,

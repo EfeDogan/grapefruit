@@ -133,7 +133,10 @@ pub fn plan_transfer(
     let current_directory =
         std::env::current_dir().map_err(FileActionError::CurrentDirectoryUnavailable)?;
     let requested_destination = absolute_path(destination_directory, &current_directory);
-    let destination = fs::canonicalize(&requested_destination).map_err(|error| {
+    // `std::fs::canonicalize` returns verbatim `\\?\` paths on Windows.
+    // `dunce` keeps the canonical comparison semantics while returning the
+    // conventional drive-letter form whenever it can be represented safely.
+    let destination = dunce::canonicalize(&requested_destination).map_err(|error| {
         FileActionError::DestinationUnavailable(requested_destination.clone(), error)
     })?;
     let destination_metadata = fs::metadata(&destination)
@@ -165,7 +168,7 @@ pub fn plan_transfer(
             ));
         }
 
-        let source = fs::canonicalize(&requested_source)
+        let source = dunce::canonicalize(&requested_source)
             .map_err(|error| FileActionError::SourceUnavailable(requested_source, error))?;
         let file_name = source
             .file_name()
@@ -432,8 +435,16 @@ mod tests {
         )
         .expect("plan copy");
 
-        assert_eq!(plan.jobs[0].destination, destination.join("notes (1).txt"));
-        assert_eq!(plan.jobs[1].destination, destination.join("album (1)"));
+        let canonical_destination =
+            dunce::canonicalize(&destination).expect("canonicalize destination");
+        assert_eq!(
+            plan.jobs[0].destination,
+            canonical_destination.join("notes (1).txt")
+        );
+        assert_eq!(
+            plan.jobs[1].destination,
+            canonical_destination.join("album (1)")
+        );
     }
 
     #[test]
@@ -495,7 +506,8 @@ mod tests {
         )
         .expect_err("reject same directory");
 
-        assert!(matches!(error, FileActionError::SameLocation(path) if path == source));
+        let canonical_source = dunce::canonicalize(&source).expect("canonicalize source");
+        assert!(matches!(error, FileActionError::SameLocation(path) if path == canonical_source));
     }
 
     #[test]

@@ -1270,6 +1270,7 @@ dependencies = [
 name = "file-formatter-core"
 version = "0.3.0"
 dependencies = [
+ "dunce",
  "printpdf",
 ]
 
