@@ -1,0 +1,3 @@
+Grapefruit drag integration test
+
+This local text document is safe to convert to PDF during end-to-end testing.

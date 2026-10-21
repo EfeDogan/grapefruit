@@ -1,0 +1,146 @@
+<div align="center">
+  <img src="website/assets/logo.svg" width="88" alt="Grapefruit logo" />
+  <h1>Grapefruit</h1>
+  <p><strong>Dosyayı sürükle. Shift'e bas. Hedefe bırak.</strong></p>
+  <p>Windows ve Linux için yerel, hızlı ve bağlama duyarlı dosya dönüştürücü.</p>
+
+  [![Windows installer](https://github.com/EfeDogan/grapefruit/actions/workflows/windows.yml/badge.svg)](https://github.com/EfeDogan/grapefruit/actions/workflows/windows.yml)
+  [![GitHub Pages](https://github.com/EfeDogan/grapefruit/actions/workflows/pages.yml/badge.svg)](https://efedogan.github.io/grapefruit/)
+  ![Version](https://img.shields.io/badge/version-0.3.0-f06b55)
+  ![Local processing](https://img.shields.io/badge/processing-local-3f6955)
+</div>
+
+<br />
+
+<picture>
+  <img src="website/assets/readme-hero.svg" alt="Grapefruit dairesel hızlı menü önizlemesi" />
+</picture>
+
+Grapefruit, dosya yöneticisindeki sürükle-bırak hareketini bölmeden imlecin yanında
+dairesel bir menü açar. `Shift` dönüşüm hedeflerini, `Control` hızlı dosya
+işlemlerini gösterir. Dosyalar bir sunucuya yüklenmez; dönüşümler yerel araçlarla
+bilgisayarda gerçekleştirilir.
+
+> [Proje sayfasını aç →](https://efedogan.github.io/grapefruit/)
+
+## Neler yapabiliyor?
+
+| Aile | Desteklenen hedefler |
+| --- | --- |
+| Görsel | JPG, PNG, WebP, TIFF, AVIF, PDF |
+| Video | MP4, MOV, MKV, WebM, AVI, GIF, MP3 |
+| PDF | 300 DPI PNG/JPG, TXT, Markdown |
+| Belge | PDF, DOCX, ODT, TXT, HTML, EPUB |
+| Sunum | PDF, PPTX, ODP, PNG/JPG slaytları |
+
+Dosya işlemleri menüsü yolu kopyalama, başka klasöre kopyalama veya taşıma,
+dosyayı klasörde gösterme ve bulunduğu konumda terminal açma işlevlerini içerir.
+
+## Nasıl çalışıyor?
+
+1. Explorer veya GNOME Files'ta bir ya da birkaç dosyayı sürüklemeye başla.
+2. Dönüştürme için `Shift`, dosya işlemleri için `Control` tuşuna bas.
+3. İmlecin yanında açılan çemberde hedefin üzerine bırak.
+
+Açık menüde `Shift` ve `Control` arasında geçiş yapılabilir. Menü ilk açıldığı
+konumu korur ve ekran sınırlarının dışına taşmaz. `Ctrl+Shift+F` ile
+`Ctrl+Shift+A`, platform entegrasyonu kullanılamadığında yedek kısayollardır.
+
+## Platform durumu
+
+| Platform | Durum | Not |
+| --- | --- | --- |
+| GNOME / Wayland | Kullanılabilir | Gerçek dosya sürükleme, konumlandırma ve dönüşümler doğrulandı. |
+| Linux / X11 | Kod hazır | Gerçek dosya yöneticisi kabul testi bekliyor. |
+| Windows 10/11 | Preview | Shift/Ctrl durum makinesi ve NSIS hattı hazır; Explorer kabul testi bekliyor. |
+
+Windows kabul adımları [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md)
+dosyasındadır. Windows izleyicisi şimdilik Explorer'a özel hook kullanmadığından,
+başka bir uygulamadaki sol tuş sürüklemesi sırasında da açılabilir.
+
+## Yerel geliştirme
+
+Gereksinimler:
+
+- Rust stable
+- Node.js 22 ve pnpm 10
+- Linux için FFmpeg, Poppler ve LibreOffice
+- Tauri'nin platform bağımlılıkları
+
+```bash
+pnpm --dir apps/desktop install
+cargo test --workspace
+pnpm --dir apps/desktop tauri dev
+```
+
+Komut satırı prototipi:
+
+```bash
+cargo run -p file-formatter-cli -- doctor
+cargo run -p file-formatter-cli -- capabilities rapor.docx sunum.pptx
+cargo run -p file-formatter-cli -- convert --to pdf rapor.docx
+```
+
+### Windows kurulum paketi
+
+PowerShell 7 üzerinden sabit sürümlü ve SHA-256 doğrulamalı FFmpeg/Poppler
+araçlarını hazırlayıp NSIS paketi oluşturabilirsin:
+
+```powershell
+./scripts/fetch-windows-tools.ps1
+pnpm --dir apps/desktop install --frozen-lockfile
+pnpm --dir apps/desktop tauri build --bundles nsis
+```
+
+FFmpeg ve Poppler Windows paketine dahil edilir. Belge ve sunum dönüşümleri için
+LibreOffice'in Windows'ta ayrıca kurulu olması gerekir.
+
+### Farklı araç yolları
+
+İç değişken adları geriye dönük uyumluluk için korunur:
+
+```bash
+FILE_FORMATTER_LIBREOFFICE=/özel/yol/soffice
+FILE_FORMATTER_FFMPEG=/özel/yol/ffmpeg
+FILE_FORMATTER_PDFTOPPM=/özel/yol/pdftoppm
+FILE_FORMATTER_PDFTOTEXT=/özel/yol/pdftotext
+```
+
+## Mimari
+
+```text
+apps/desktop/                 Tauri masaüstü uygulaması ve dairesel arayüz
+crates/file-formatter-core/   Dönüşüm planı, araç adaptörleri ve dosya güvenliği
+crates/file-formatter-cli/    Çekirdeğin komut satırı prototipi
+integrations/                 GNOME Shell ve Nautilus bütünleşmesi
+website/                      GitHub Pages tanıtım sayfası
+```
+
+Platform kararları için [docs/PLATFORM_INTEGRATION.md](docs/PLATFORM_INTEGRATION.md),
+planlanan işler için [docs/ROADMAP.md](docs/ROADMAP.md) dosyasına bakın.
+
+## Veri güvenliği
+
+- Kaynak dosyalar değiştirilmez.
+- Var olan çıktıların üzerine yazılmaz; çakışmada yeni ad üretilir.
+- Komutlar kabuk metnine dönüştürülmez, araçlara ayrı süreç argümanı olarak verilir.
+- Geçici çıktılar kaynakla aynı dosya sisteminde hazırlanıp atomik olarak taşınır.
+- Bir klasörün kendi içine kopyalanması veya taşınması reddedilir.
+- Her LibreOffice işi yalıtılmış kullanıcı profili kullanır.
+
+## Testler
+
+```bash
+cargo fmt --all --check
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+pnpm --dir apps/desktop build
+```
+
+## Lisans notu
+
+Projenin kendi lisansı henüz seçilmedi. Windows paketindeki FFmpeg, Poppler ve
+diğer üçüncü taraf bileşenlerin bildirimleri
+[`THIRD_PARTY_NOTICES.txt`](apps/desktop/src-tauri/windows-tools/THIRD_PARTY_NOTICES.txt)
+dosyasında tutulur. Herkese açık bir son kullanıcı sürümü yayımlanmadan önce
+dağıtım yükümlülükleri ayrıca gözden geçirilmelidir.

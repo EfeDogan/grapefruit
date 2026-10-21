@@ -1,0 +1,7 @@
+{
+  "uuid": "grapefruit@io.github.efedogan",
+  "name": "Grapefruit Drag Keys",
+  "description": "Opens Grapefruit with Shift or Control while dragging files from GNOME Files.",
+  "shell-version": ["48", "49", "50"],
+  "version": 4
+}

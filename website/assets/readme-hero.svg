@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" role="img" aria-labelledby="title desc">
+  <title id="title">Grapefruit quick file menu</title>
+  <desc id="desc">A grapefruit colored interface showing a circular conversion menu next to the words drag, choose and drop.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff9f1"/>
+      <stop offset=".58" stop-color="#f8eee3"/>
+      <stop offset="1" stop-color="#e9f0e9"/>
+    </linearGradient>
+    <linearGradient id="hot" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8f70"/>
+      <stop offset="1" stop-color="#ef5d58"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#6b463b" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="500" rx="38" fill="url(#bg)"/>
+  <circle cx="1120" cy="50" r="180" fill="#f88972" opacity=".12"/>
+  <circle cx="64" cy="460" r="170" fill="#5b8068" opacity=".1"/>
+  <g transform="translate(92 88)">
+    <rect width="66" height="66" rx="20" fill="#27352d"/>
+    <path d="M22 33h22M33 22v22" stroke="#fff8ef" stroke-width="6" stroke-linecap="round"/>
+    <text x="84" y="45" fill="#27352d" font-family="Inter,Segoe UI,sans-serif" font-size="32" font-weight="800">Grapefruit</text>
+    <text x="0" y="140" fill="#27352d" font-family="Inter,Segoe UI,sans-serif" font-size="59" font-weight="800" letter-spacing="-3">Sürükle. Seç.</text>
+    <text x="0" y="207" fill="#ef5d58" font-family="Inter,Segoe UI,sans-serif" font-size="59" font-weight="800" letter-spacing="-3">Bırak ve devam et.</text>
+    <text x="2" y="259" fill="#687269" font-family="Inter,Segoe UI,sans-serif" font-size="20">Dönüşüm ve dosya işlemleri, imlecin olduğu yerde.</text>
+    <g transform="translate(0 296)">
+      <rect width="162" height="48" rx="24" fill="#27352d"/>
+      <text x="81" y="31" text-anchor="middle" fill="#fff8ef" font-family="Inter,Segoe UI,sans-serif" font-size="15" font-weight="700">⇧  DÖNÜŞTÜR</text>
+      <rect x="174" width="150" height="48" rx="24" fill="#fffaf4" stroke="#d9d6cc"/>
+      <text x="249" y="31" text-anchor="middle" fill="#405348" font-family="Inter,Segoe UI,sans-serif" font-size="15" font-weight="700">CTRL  İŞLEMLER</text>
+    </g>
+  </g>
+  <g transform="translate(890 250)" filter="url(#shadow)">
+    <circle r="188" fill="#fffdf9" stroke="#fff" stroke-width="8"/>
+    <g fill="#eef0e9" stroke="#fff" stroke-width="7">
+      <path d="M0-176A176 176 0 0 1 152-88L71-41A82 82 0 0 0 0-82Z" fill="url(#hot)"/>
+      <path d="M152-88A176 176 0 0 1 152 88L71 41A82 82 0 0 0 71-41Z"/>
+      <path d="M152 88A176 176 0 0 1 0 176V82A82 82 0 0 0 71 41Z"/>
+      <path d="M0 176A176 176 0 0 1-152 88l81-47A82 82 0 0 0 0 41Z"/>
+      <path d="M-152 88A176 176 0 0 1-152-88l81 47A82 82 0 0 0-71 41Z"/>
+      <path d="M-152-88A176 176 0 0 1 0-176v94a82 82 0 0 0-71 41Z"/>
+    </g>
+    <circle r="74" fill="#fffaf4" stroke="#fff" stroke-width="8"/>
+    <text y="8" text-anchor="middle" fill="#27352d" font-family="Inter,Segoe UI,sans-serif" font-size="24" font-weight="800">DOCX</text>
+    <g fill="#27352d" font-family="Inter,Segoe UI,sans-serif" font-size="18" font-weight="800" text-anchor="middle">
+      <text y="-123">PDF</text><text x="119" y="-59">HTML</text><text x="119" y="70">EPUB</text>
+      <text y="139">TXT</text><text x="-119" y="70">ODT</text><text x="-119" y="-59">MD</text>
+    </g>
+  </g>
+</svg>

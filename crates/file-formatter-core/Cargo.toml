@@ -1,0 +1,10 @@
+[package]
+name = "file-formatter-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+printpdf = { version = "0.8.2", default-features = false, features = ["png"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,14 @@
+/target/
+**/node_modules/
+apps/desktop/dist/
+apps/desktop/src-tauri/windows-tools/ffmpeg/*
+apps/desktop/src-tauri/windows-tools/poppler/*
+!apps/desktop/src-tauri/windows-tools/ffmpeg/.gitkeep
+!apps/desktop/src-tauri/windows-tools/poppler/.gitkeep
+/.idea/
+/.vscode/
+*.log
+__pycache__/
+*.py[cod]
+.DS_Store
+/design-qa.md

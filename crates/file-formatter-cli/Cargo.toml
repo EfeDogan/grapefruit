@@ -1,0 +1,10 @@
+[package]
+name = "file-formatter-cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+file-formatter-core = { path = "../file-formatter-core" }
+
+[lints]
+workspace = true

@@ -1,0 +1,25 @@
+{
+  "productName": "io.github.efedogan.grapefruit",
+  "app": {
+    "enableGTKAppId": true
+  },
+  "bundle": {
+    "linux": {
+      "deb": {
+        "depends": [
+          "ffmpeg",
+          "poppler-utils",
+          "libreoffice-core-nogui",
+          "libreoffice-writer-nogui",
+          "libreoffice-impress-nogui",
+          "libreoffice-draw-nogui",
+          "libreoffice-calc-nogui"
+        ],
+        "desktopTemplate": "linux/grapefruit.desktop.hbs"
+      },
+      "rpm": {
+        "desktopTemplate": "linux/grapefruit.desktop.hbs"
+      }
+    }
+  }
+}
