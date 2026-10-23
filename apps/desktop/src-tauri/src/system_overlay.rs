@@ -7,10 +7,6 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
 
 use crate::modifier_settings::{self as modifier_config, ModifierSettings};
 
-const CONVERT_SHORTCUT: &str = "Ctrl+Shift+F";
-const ACTIONS_SHORTCUT: &str = "Ctrl+Shift+A";
-#[cfg(target_os = "linux")]
-const APP_ID: &str = "io.github.efedogan.grapefruit";
 #[cfg(target_os = "linux")]
 const INTEGRATION_BUS_NAME: &str = "io.github.efedogan.grapefruit.Integration";
 #[cfg(target_os = "linux")]
@@ -141,7 +137,7 @@ impl OverlayMenuMode {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ShortcutStatus {
+pub struct DragIntegrationStatus {
     backend: String,
     ready: bool,
     convert_shortcut: String,
@@ -167,24 +163,29 @@ pub struct OverlayRuntime {
     mode: Mutex<Option<OverlayMenuMode>>,
     external_selection: Mutex<Vec<String>>,
     modifier_settings: Mutex<ModifierSettings>,
-    shortcut_status: Mutex<ShortcutStatus>,
+    drag_integration_status: Mutex<DragIntegrationStatus>,
 }
 
 impl Default for OverlayRuntime {
     fn default() -> Self {
+        let modifier_settings = modifier_config::load();
         Self {
             mode: Mutex::new(None),
             external_selection: Mutex::new(Vec::new()),
-            modifier_settings: Mutex::new(modifier_config::load()),
-            shortcut_status: Mutex::new(ShortcutStatus {
+            modifier_settings: Mutex::new(modifier_settings),
+            drag_integration_status: Mutex::new(DragIntegrationStatus {
                 backend: "initializing".to_owned(),
                 ready: false,
-                convert_shortcut: CONVERT_SHORTCUT.to_owned(),
-                actions_shortcut: ACTIONS_SHORTCUT.to_owned(),
-                detail: "Global shortcuts are being initialized".to_owned(),
+                convert_shortcut: drag_key_label(modifier_settings.convert_modifier),
+                actions_shortcut: drag_key_label(modifier_settings.actions_modifier),
+                detail: "File-drag integration is being initialized".to_owned(),
             }),
         }
     }
+}
+
+fn drag_key_label(key: crate::modifier_settings::ModifierKey) -> String {
+    format!("{} while dragging", key.label())
 }
 
 #[cfg(target_os = "linux")]
@@ -429,62 +430,72 @@ fn upgrade_legacy_gnome_extension() -> Result<(), String> {
     Ok(())
 }
 
-pub fn setup_system_shortcuts(app: &AppHandle) {
-    if std::env::var_os("FILE_FORMATTER_DISABLE_GLOBAL_SHORTCUTS").is_some() {
+pub fn setup_drag_integration(app: &AppHandle) {
+    let settings = app
+        .state::<OverlayRuntime>()
+        .modifier_settings
+        .lock()
+        .map(|settings| *settings)
+        .unwrap_or_default();
+    let convert_shortcut = drag_key_label(settings.convert_modifier);
+    let actions_shortcut = drag_key_label(settings.actions_modifier);
+
+    #[cfg(target_os = "windows")]
+    {
+        let (ready, backend, detail) = match setup_windows_drag_keys(app) {
+            Ok(()) => (
+                true,
+                "windows-drag-keys",
+                "Windows Explorer and desktop drag keys are ready".to_owned(),
+            ),
+            Err(error) => {
+                eprintln!("[windows-drag-keys] setup failed: {error}");
+                (
+                    false,
+                    "windows-unavailable",
+                    format!("Windows drag-key monitor could not start: {error}"),
+                )
+            }
+        };
         set_status(
             app,
-            ShortcutStatus {
-                backend: "disabled".to_owned(),
-                ready: false,
-                convert_shortcut: CONVERT_SHORTCUT.to_owned(),
-                actions_shortcut: ACTIONS_SHORTCUT.to_owned(),
-                detail: "Global shortcuts are disabled for this process".to_owned(),
+            DragIntegrationStatus {
+                backend: backend.to_owned(),
+                ready,
+                convert_shortcut,
+                actions_shortcut,
+                detail,
             },
         );
-        return;
     }
 
     #[cfg(target_os = "linux")]
-    if is_wayland_session() {
+    {
         set_status(
             app,
-            ShortcutStatus {
-                backend: "xdg-portal".to_owned(),
-                ready: false,
-                convert_shortcut: CONVERT_SHORTCUT.to_owned(),
-                actions_shortcut: ACTIONS_SHORTCUT.to_owned(),
-                detail: "Waiting for Wayland global shortcut permission".to_owned(),
+            DragIntegrationStatus {
+                backend: "linux-file-manager-integration".to_owned(),
+                ready: true,
+                convert_shortcut,
+                actions_shortcut,
+                detail: "GNOME Files and desktop drag integration is ready".to_owned(),
             },
         );
-        let app = app.clone();
-        tauri::async_runtime::spawn(async move {
-            if let Err(error) = run_wayland_shortcuts(app.clone()).await {
-                set_status(
-                    &app,
-                    ShortcutStatus {
-                        backend: "xdg-portal".to_owned(),
-                        ready: false,
-                        convert_shortcut: CONVERT_SHORTCUT.to_owned(),
-                        actions_shortcut: ACTIONS_SHORTCUT.to_owned(),
-                        detail: format!("Wayland shortcut setup failed: {error}"),
-                    },
-                );
-            }
-        });
-        return;
     }
 
-    #[cfg(target_os = "windows")]
-    let drag_keys_ready = match setup_windows_drag_keys(app) {
-        Ok(()) => true,
-        Err(error) => {
-            eprintln!("[windows-drag-keys] setup failed: {error}");
-            false
-        }
-    };
-    #[cfg(not(target_os = "windows"))]
-    let drag_keys_ready = false;
-    setup_native_shortcuts(app, drag_keys_ready);
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        set_status(
+            app,
+            DragIntegrationStatus {
+                backend: "unsupported".to_owned(),
+                ready: false,
+                convert_shortcut,
+                actions_shortcut,
+                detail: "File-drag integration is unavailable on this platform".to_owned(),
+            },
+        );
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -644,230 +655,6 @@ fn emit_overlay_pointer(
         .map_err(|error| error.to_string())
 }
 
-fn setup_native_shortcuts(app: &AppHandle, drag_keys_ready: bool) {
-    use tauri_plugin_global_shortcut::{
-        Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
-    };
-
-    let convert = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyF);
-    let actions = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyA);
-    let modifier_settings = app
-        .state::<OverlayRuntime>()
-        .modifier_settings
-        .lock()
-        .map(|settings| *settings)
-        .unwrap_or_default();
-    let drag_convert_shortcut = format!(
-        "{} while dragging",
-        modifier_settings.convert_modifier.label()
-    );
-    let drag_actions_shortcut = format!(
-        "{} while dragging",
-        modifier_settings.actions_modifier.label()
-    );
-    let convert_for_handler = convert;
-    let actions_for_handler = actions;
-
-    let plugin = tauri_plugin_global_shortcut::Builder::new()
-        .with_handler(move |app, shortcut, event| {
-            if event.state() != ShortcutState::Pressed {
-                return;
-            }
-            if shortcut == &convert_for_handler {
-                let _ = toggle_overlay(app, OverlayMenuMode::Convert);
-            } else if shortcut == &actions_for_handler {
-                let _ = toggle_overlay(app, OverlayMenuMode::Actions);
-            }
-        })
-        .build();
-
-    let result = match app.plugin(plugin) {
-        Ok(()) => app
-            .global_shortcut()
-            .register_multiple([convert, actions])
-            .map_err(|error| error.to_string()),
-        Err(error) => Err(error.to_string()),
-    };
-
-    match result {
-        Ok(()) => set_status(
-            app,
-            ShortcutStatus {
-                backend: if cfg!(target_os = "windows") {
-                    if drag_keys_ready {
-                        "windows"
-                    } else {
-                        "windows-fallback"
-                    }
-                } else {
-                    "x11"
-                }
-                .to_owned(),
-                ready: true,
-                convert_shortcut: if cfg!(target_os = "windows") && drag_keys_ready {
-                    &drag_convert_shortcut
-                } else {
-                    CONVERT_SHORTCUT
-                }
-                .to_owned(),
-                actions_shortcut: if cfg!(target_os = "windows") && drag_keys_ready {
-                    &drag_actions_shortcut
-                } else {
-                    ACTIONS_SHORTCUT
-                }
-                .to_owned(),
-                detail: if cfg!(target_os = "windows") && drag_keys_ready {
-                    "Windows drag keys and fallback global shortcuts are ready"
-                } else if cfg!(target_os = "windows") {
-                    "Fallback global shortcuts are ready; the drag-key monitor could not start"
-                } else {
-                    "System-wide shortcuts are ready"
-                }
-                .to_owned(),
-            },
-        ),
-        Err(error) => {
-            #[cfg(target_os = "windows")]
-            set_status(
-                app,
-                ShortcutStatus {
-                    backend: if drag_keys_ready {
-                        "windows-drag-keys"
-                    } else {
-                        "windows-unavailable"
-                    }
-                    .to_owned(),
-                    ready: drag_keys_ready,
-                    convert_shortcut: if drag_keys_ready {
-                        &drag_convert_shortcut
-                    } else {
-                        CONVERT_SHORTCUT
-                    }
-                    .to_owned(),
-                    actions_shortcut: if drag_keys_ready {
-                        &drag_actions_shortcut
-                    } else {
-                        ACTIONS_SHORTCUT
-                    }
-                    .to_owned(),
-                    detail: if drag_keys_ready {
-                        format!(
-                            "Drag shortcuts are ready; fallback global shortcuts are unavailable: {error}"
-                        )
-                    } else {
-                        format!("Windows shortcuts are unavailable: {error}")
-                    },
-                },
-            );
-            #[cfg(not(target_os = "windows"))]
-            set_status(
-                app,
-                ShortcutStatus {
-                    backend: "native".to_owned(),
-                    ready: false,
-                    convert_shortcut: CONVERT_SHORTCUT.to_owned(),
-                    actions_shortcut: ACTIONS_SHORTCUT.to_owned(),
-                    detail: format!("Global shortcut setup failed: {error}"),
-                },
-            );
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-async fn run_wayland_shortcuts(app: AppHandle) -> Result<(), String> {
-    use ashpd::desktop::{
-        CreateSessionOptions,
-        global_shortcuts::{BindShortcutsOptions, GlobalShortcuts, NewShortcut},
-    };
-    use ashpd::{AppID, register_host_app_with_connection};
-    use futures_util::StreamExt;
-
-    // Host applications do not have a sandbox manifest from which the portal can
-    // infer an application ID. Register this process on the same D-Bus connection
-    // used for GlobalShortcuts so GNOME can associate the permission with the app.
-    let connection = ashpd::zbus::Connection::session()
-        .await
-        .map_err(|error| error.to_string())?;
-    let app_id = APP_ID.parse::<AppID>().map_err(|error| error.to_string())?;
-    register_host_app_with_connection(connection.clone(), app_id)
-        .await
-        .map_err(|error| error.to_string())?;
-    let portal = GlobalShortcuts::with_connection(connection)
-        .await
-        .map_err(|error| error.to_string())?;
-    let session = portal
-        .create_session(CreateSessionOptions::default())
-        .await
-        .map_err(|error| error.to_string())?;
-    let mut activated = portal
-        .receive_activated()
-        .await
-        .map_err(|error| error.to_string())?;
-    let shortcuts = [
-        NewShortcut::new("open-convert", "Grapefruit conversion menu")
-            .preferred_trigger("CTRL+SHIFT+F"),
-        NewShortcut::new("open-actions", "Grapefruit file actions menu")
-            .preferred_trigger("CTRL+SHIFT+A"),
-    ];
-    let request = portal
-        .bind_shortcuts(&session, &shortcuts, None, BindShortcutsOptions::default())
-        .await
-        .map_err(|error| error.to_string())?;
-    let response = request.response().map_err(|error| error.to_string())?;
-    let bound = response
-        .shortcuts()
-        .iter()
-        .map(|shortcut| shortcut.trigger_description())
-        .collect::<Vec<_>>()
-        .join(" / ");
-
-    set_status(
-        &app,
-        ShortcutStatus {
-            backend: format!("xdg-portal-v{}", portal.version()),
-            ready: true,
-            convert_shortcut: CONVERT_SHORTCUT.to_owned(),
-            actions_shortcut: ACTIONS_SHORTCUT.to_owned(),
-            detail: if bound.is_empty() {
-                "Wayland shortcuts are ready".to_owned()
-            } else {
-                format!("Wayland shortcuts are ready: {bound}")
-            },
-        },
-    );
-
-    while let Some(event) = activated.next().await {
-        let mode = match event.shortcut_id() {
-            "open-convert" => Some(OverlayMenuMode::Convert),
-            "open-actions" => Some(OverlayMenuMode::Actions),
-            _ => None,
-        };
-        if let Some(mode) = mode {
-            let _ = toggle_overlay(&app, mode);
-        }
-    }
-
-    Err("Wayland shortcut event stream ended".to_owned())
-}
-
-fn toggle_overlay(app: &AppHandle, mode: OverlayMenuMode) -> Result<(), String> {
-    let overlay = app
-        .get_webview_window("overlay")
-        .ok_or("overlay window is unavailable")?;
-    let current_mode = *app
-        .state::<OverlayRuntime>()
-        .mode
-        .lock()
-        .map_err(|_| "overlay state lock is poisoned")?;
-    let is_visible = overlay.is_visible().map_err(|error| error.to_string())?;
-
-    if is_visible && current_mode == Some(mode) {
-        return hide_overlay_window(app);
-    }
-    present_overlay(app, mode)
-}
-
 fn present_overlay(app: &AppHandle, mode: OverlayMenuMode) -> Result<(), String> {
     if let Ok(mut selection) = app.state::<OverlayRuntime>().external_selection.lock() {
         selection.clear();
@@ -990,15 +777,15 @@ fn hide_overlay_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn set_status(app: &AppHandle, status: ShortcutStatus) {
+fn set_status(app: &AppHandle, status: DragIntegrationStatus) {
     eprintln!(
-        "[global-shortcuts] backend={} ready={} detail={}",
+        "[drag-integration] backend={} ready={} detail={}",
         status.backend, status.ready, status.detail
     );
-    if let Ok(mut current) = app.state::<OverlayRuntime>().shortcut_status.lock() {
+    if let Ok(mut current) = app.state::<OverlayRuntime>().drag_integration_status.lock() {
         *current = status.clone();
     }
-    let _ = app.emit("global-shortcut-status", status);
+    let _ = app.emit("drag-integration-status", status);
 }
 
 #[cfg(target_os = "linux")]
@@ -1041,17 +828,17 @@ pub fn current_overlay_selection(state: State<'_, OverlayRuntime>) -> ExternalSe
 }
 
 #[tauri::command]
-pub fn global_shortcut_status(state: State<'_, OverlayRuntime>) -> ShortcutStatus {
+pub fn drag_integration_status(state: State<'_, OverlayRuntime>) -> DragIntegrationStatus {
     state
-        .shortcut_status
+        .drag_integration_status
         .lock()
         .map(|status| status.clone())
-        .unwrap_or_else(|_| ShortcutStatus {
+        .unwrap_or_else(|_| DragIntegrationStatus {
             backend: "unknown".to_owned(),
             ready: false,
-            convert_shortcut: CONVERT_SHORTCUT.to_owned(),
-            actions_shortcut: ACTIONS_SHORTCUT.to_owned(),
-            detail: "Shortcut state is unavailable".to_owned(),
+            convert_shortcut: "Shift while dragging".to_owned(),
+            actions_shortcut: "Ctrl while dragging".to_owned(),
+            detail: "File-drag integration state is unavailable".to_owned(),
         })
 }
 

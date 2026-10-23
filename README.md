@@ -45,8 +45,9 @@ dosyayı klasörde gösterme ve bulunduğu konumda terminal açma işlevlerini i
 
 Açık menüde `Shift` ve `Control` arasında geçiş yapılabilir. Menü ilk açıldığı
 konumu korur ve ekran sınırlarının dışına taşmaz. Uygulamanın **Ayarlar**
-penceresinden tuşlar yer değiştirilebilir. `Ctrl+Shift+F` ile `Ctrl+Shift+A`,
-platform entegrasyonu kullanılamadığında yedek kısayollardır.
+penceresinden tuşlar yer değiştirilebilir. Menü yalnızca Explorer, GNOME Files
+veya masaüstünden başlayan doğrulanmış bir dosya sürüklemesinde açılır; bağımsız
+global klavye kısayolu kaydedilmez.
 
 ## Platform durumu
 

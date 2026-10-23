@@ -25,7 +25,7 @@ type ConversionResponse = { outputs: string[] };
 type TransferResponse = { outputs: string[] };
 type ExternalSelection = { paths: string[] };
 type Point = { x: number; y: number };
-type ShortcutStatus = {
+type DragIntegrationStatus = {
   backend: string;
   ready: boolean;
   convertShortcut: string;
@@ -85,7 +85,7 @@ app.innerHTML = `
       <p class="eyebrow">DOSYA DÖNÜŞTÜRÜCÜ VE HIZLI İŞLEMLER</p>
       <h1 id="page-title">Sürükle. Hedefi seç.<br /><em>Bırak ve devam et.</em></h1>
       <p class="lede">Görsel, video, PDF, belge ve sunumları dönüştür; günlük dosya işlemlerini tek bir dairesel menüden tamamla.</p>
-      <p id="global-status" class="global-status">Sistem kısayolları hazırlanıyor…</p>
+      <p id="global-status" class="global-status">Dosya sürükleme entegrasyonu hazırlanıyor…</p>
     </section>
 
     <section id="drop-stage" class="drop-stage" aria-label="Dosya bırakma alanı">
@@ -208,7 +208,7 @@ let modifierSettings: ModifierSettings = {
   convertModifier: "shift",
   actionsModifier: "control",
 };
-let shortcutStatus: ShortcutStatus | null = null;
+let dragIntegrationStatus: DragIntegrationStatus | null = null;
 
 const segments: SVGPathElement[] = [];
 const segmentLabels: SVGTextElement[] = [];
@@ -302,16 +302,16 @@ if (runningInTauri) {
     updatePointer(event.payload);
     void commitDrop();
   });
-  await listen<ShortcutStatus>("global-shortcut-status", (event) => {
-    renderShortcutStatus(event.payload);
+  await listen<DragIntegrationStatus>("drag-integration-status", (event) => {
+    renderDragIntegrationStatus(event.payload);
   });
   await listen<ModifierSettings>("modifier-settings", (event) => {
     applyModifierSettings(event.payload);
   });
 
   applyModifierSettings(await invoke<ModifierSettings>("get_modifier_settings"));
-  const status = await invoke<ShortcutStatus>("global_shortcut_status");
-  renderShortcutStatus(status);
+  const status = await invoke<DragIntegrationStatus>("drag_integration_status");
+  renderDragIntegrationStatus(status);
   if (isOverlay) {
     const initialMode = await invoke<MenuMode>("current_overlay_mode");
     setMenuMode(initialMode, true);
@@ -657,13 +657,13 @@ function setStatus(icon: string, title: string, detail: string, state: string): 
   stage.dataset.state = state;
 }
 
-function renderShortcutStatus(status: ShortcutStatus): void {
-  shortcutStatus = status;
+function renderDragIntegrationStatus(status: DragIntegrationStatus): void {
+  dragIntegrationStatus = status;
   globalStatus.classList.toggle("is-ready", status.ready);
   globalStatus.classList.toggle("is-error", !status.ready);
   globalStatus.textContent = `Dosyayı sürüklerken ${modifierLabel(modifierSettings.convertModifier)}: dönüştür • ${modifierLabel(modifierSettings.actionsModifier)}: dosya işlemleri`;
   globalStatus.title = status.ready
-    ? `Sistem kısayolları: ${status.convertShortcut} / ${status.actionsShortcut} — ${status.detail}`
+    ? `Dosya sürükleme: ${status.convertShortcut} / ${status.actionsShortcut} — ${status.detail}`
     : `${status.backend} — ${status.detail}`;
 }
 
@@ -679,7 +679,7 @@ function applyModifierSettings(settings: ModifierSettings): void {
   actionsKey.textContent = settings.actionsModifier === "shift" ? "⇧" : "Ctrl";
   convertKeyHelp.textContent = `${modifierLabel(settings.convertModifier)} ile seç`;
   actionsKeyHelp.textContent = `${modifierLabel(settings.actionsModifier)} ile seç`;
-  if (shortcutStatus) renderShortcutStatus(shortcutStatus);
+  if (dragIntegrationStatus) renderDragIntegrationStatus(dragIntegrationStatus);
 }
 
 function renderSettingsPreview(): void {

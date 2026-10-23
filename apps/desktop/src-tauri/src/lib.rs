@@ -22,8 +22,8 @@ mod system_overlay;
 mod windows_selection;
 
 use system_overlay::{
-    OverlayRuntime, current_overlay_mode, current_overlay_selection, get_modifier_settings,
-    global_shortcut_status, hide_overlay, set_modifier_settings, show_overlay,
+    OverlayRuntime, current_overlay_mode, current_overlay_selection, drag_integration_status,
+    get_modifier_settings, hide_overlay, set_modifier_settings, show_overlay,
 };
 
 #[derive(Debug, Serialize)]
@@ -321,7 +321,7 @@ pub fn run() {
             }
             #[cfg(target_os = "linux")]
             system_overlay::setup_linux_desktop_integration(app.handle());
-            system_overlay::setup_system_shortcuts(app.handle());
+            system_overlay::setup_drag_integration(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -349,7 +349,7 @@ pub fn run() {
             hide_overlay,
             current_overlay_mode,
             current_overlay_selection,
-            global_shortcut_status,
+            drag_integration_status,
             get_modifier_settings,
             set_modifier_settings
         ])

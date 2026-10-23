@@ -24,12 +24,8 @@ tauri-plugin-single-instance = "2"
 [lints]
 workspace = true
 
-[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
-tauri-plugin-global-shortcut = "2"
-
 [target.'cfg(target_os = "linux")'.dependencies]
-ashpd = { version = "0.13.13", default-features = false, features = ["tokio", "global_shortcuts"] }
-futures-util = "0.3"
+ashpd = { version = "0.13.13", default-features = false, features = ["tokio"] }
 zbus = { version = "5.19.0", default-features = false, features = ["tokio"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

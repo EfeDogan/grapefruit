@@ -11,8 +11,8 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Ole::{CF_HDROP, ReleaseStgMedium};
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Shell::{
-    DragQueryFileW, HDROP, IShellBrowser, IShellWindows, IWebBrowser2, SID_STopLevelBrowser,
-    SVGIO_SELECTION, SWC_DESKTOP, SWFO_NEEDDISPATCH, ShellWindows,
+    CSIDL_DESKTOP, DragQueryFileW, HDROP, IShellBrowser, IShellWindows, IWebBrowser2,
+    SID_STopLevelBrowser, SVGIO_SELECTION, SWC_DESKTOP, SWFO_NEEDDISPATCH, ShellWindows,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GA_ROOT, GetAncestor, GetClassNameW, GetForegroundWindow, WindowFromPoint,
@@ -135,12 +135,17 @@ pub fn selected_paths_at(pointer: (i32, i32)) -> Result<Vec<String>, String> {
     // The desktop is a Shell view but is not guaranteed to appear in the normal ShellWindows
     // enumeration. Query it explicitly as the fallback source.
     let mut desktop_hwnd = 0;
-    // SAFETY: FindWindowSW accepts null location variants for SWC_DESKTOP and writes only to the
-    // supplied integer handle slot. The returned dispatch remains apartment-bound.
+    let desktop_location = VARIANT::from(CSIDL_DESKTOP as i32);
+    let empty_root = VARIANT::default();
+    // Microsoft Shell clients identify the desktop with CSIDL_DESKTOP and an empty root variant.
+    // Passing null variants can find the desktop window but fail to expose its active Shell view
+    // on current Windows 11 builds.
+    // SAFETY: FindWindowSW reads the two initialized variants and writes only to the supplied
+    // integer handle slot. The returned dispatch remains apartment-bound.
     let desktop = unsafe {
         shell_windows.FindWindowSW(
-            std::ptr::null(),
-            std::ptr::null(),
+            &desktop_location,
+            &empty_root,
             SWC_DESKTOP,
             &mut desktop_hwnd,
             SWFO_NEEDDISPATCH,

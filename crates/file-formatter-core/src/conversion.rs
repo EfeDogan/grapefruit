@@ -3,6 +3,7 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::str::FromStr;
@@ -1021,11 +1022,7 @@ fn finalize_pages(
             continue;
         }
         for (from, to) in generated.iter().zip(&targets) {
-            fs::rename(from, to).map_err(|source| ConversionError::FinalizeOutput {
-                from: from.clone(),
-                to: to.clone(),
-                source,
-            })?;
+            move_completed_output(from, to)?;
         }
         return Ok(targets);
     }
@@ -1036,12 +1033,45 @@ fn finalize_single(generated: &Path, output: &Path) -> Result<PathBuf, Conversio
     if output.exists() {
         return Err(ConversionError::OutputAlreadyExists(output.to_path_buf()));
     }
-    fs::rename(generated, output).map_err(|source| ConversionError::FinalizeOutput {
-        from: generated.to_path_buf(),
-        to: output.to_path_buf(),
+    move_completed_output(generated, output)?;
+    Ok(output.to_path_buf())
+}
+
+fn move_completed_output(from: &Path, to: &Path) -> Result<(), ConversionError> {
+    if to.exists() {
+        return Err(ConversionError::OutputAlreadyExists(to.to_path_buf()));
+    }
+    if fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+
+    // The system temp directory can live on another drive. Copy only after the converter has
+    // completed, using create_new so a file that appeared in the meantime is never overwritten.
+    let mut source = fs::File::open(from).map_err(|source| ConversionError::FinalizeOutput {
+        from: from.to_path_buf(),
+        to: to.to_path_buf(),
         source,
     })?;
-    Ok(output.to_path_buf())
+    let mut destination = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(to)
+        .map_err(|source| ConversionError::FinalizeOutput {
+            from: from.to_path_buf(),
+            to: to.to_path_buf(),
+            source,
+        })?;
+    let result = io::copy(&mut source, &mut destination).and_then(|_| destination.sync_all());
+    if let Err(source) = result {
+        drop(destination);
+        let _ = fs::remove_file(to);
+        return Err(ConversionError::FinalizeOutput {
+            from: from.to_path_buf(),
+            to: to.to_path_buf(),
+            source,
+        });
+    }
+    Ok(())
 }
 
 fn ensure_tool_success(
@@ -1204,13 +1234,13 @@ fn find_on_path(executable: &str) -> Option<PathBuf> {
     None
 }
 
-fn unique_staging_directory(parent: &Path) -> PathBuf {
+fn unique_staging_directory(_output_parent: &Path) -> PathBuf {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
     let sequence = JOB_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    parent.join(format!(
+    env::temp_dir().join("grapefruit").join(format!(
         ".file-formatter-{}-{timestamp}-{sequence}",
         std::process::id()
     ))
@@ -1281,6 +1311,14 @@ mod tests {
         assert!(!targets.contains(&TargetFormat::Png));
         assert!(targets.contains(&TargetFormat::Jpg));
         assert!(targets.contains(&TargetFormat::Pdf));
+    }
+
+    #[test]
+    fn keeps_conversion_staging_outside_the_output_directory() {
+        let output = TestDirectory::new("output");
+        let staging = unique_staging_directory(output.path());
+        assert!(staging.starts_with(env::temp_dir().join("grapefruit")));
+        assert!(!staging.starts_with(output.path()));
     }
 
     #[test]
