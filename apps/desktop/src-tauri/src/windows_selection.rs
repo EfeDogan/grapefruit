@@ -46,11 +46,6 @@ impl Drop for ComApartment {
 pub fn selected_paths_at(pointer: (i32, i32)) -> Result<Vec<String>, String> {
     let _apartment = ComApartment::initialize()?;
 
-    // SAFETY: ShellWindows is a system COM local server. The apartment guard remains alive for
-    // every interface used by this function.
-    let shell_windows: IShellWindows = unsafe { CoCreateInstance(&ShellWindows, None, CLSCTX_ALL) }
-        .map_err(|error| format!("could not connect to Windows Explorer: {error}"))?;
-
     // The Windows desktop is not guaranteed to become the foreground window when an icon is
     // dragged. Prefer the window below the pointer, then fall back to the foreground Explorer
     // frame. Both handles are normalized to their top-level roots before class validation.
@@ -73,6 +68,14 @@ pub fn selected_paths_at(pointer: (i32, i32)) -> Result<Vec<String>, String> {
         return Ok(Vec::new());
     };
     let source_class = window_class_name(source_window).unwrap_or_default();
+
+    // Connect to the Shell only after the source class has been accepted. Since this function is
+    // sampled on mouse-down, ordinary clicks and text drags in browsers/editors should return
+    // without touching Explorer automation.
+    // SAFETY: ShellWindows is a system COM local server. The apartment guard remains alive for
+    // every interface used by this function.
+    let shell_windows: IShellWindows = unsafe { CoCreateInstance(&ShellWindows, None, CLSCTX_ALL) }
+        .map_err(|error| format!("could not connect to Windows Explorer: {error}"))?;
 
     // Limit the COM lookup before touching any cached Shell selection. This keeps ordinary mouse
     // drags in browsers and editors from reusing a selection left behind in Explorer.

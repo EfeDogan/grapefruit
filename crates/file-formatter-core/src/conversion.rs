@@ -13,6 +13,26 @@ use printpdf::{Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, RawImage, XObjectTr
 
 static JOB_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+/// Creates a conversion-tool process without exposing a console window on Windows.
+///
+/// Grapefruit itself is a GUI application. Without `CREATE_NO_WINDOW`, console-subsystem tools
+/// such as FFmpeg and Poppler create a visible Command Prompt window for every conversion.
+fn background_command(program: impl AsRef<OsStr>) -> Command {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt as _;
+
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {
     Image,
@@ -599,7 +619,7 @@ impl ConversionEngine {
                 ConversionError::OutputDirectoryUnavailable(staging.clone(), error)
             })?;
             let generated = staging.join(format!("output.{}", job.target.extension()));
-            let output = Command::new(self.pdftotext()?)
+            let output = background_command(self.pdftotext()?)
                 .arg("-layout")
                 .arg(&job.input)
                 .arg(&generated)
@@ -665,7 +685,7 @@ impl LibreOfficeConverter {
         &self.executable
     }
     pub fn version(&self) -> Result<String, ConversionError> {
-        let output = Command::new(&self.executable)
+        let output = background_command(&self.executable)
             .arg("--version")
             .output()
             .map_err(|source| ConversionError::ToolLaunch {
@@ -712,7 +732,7 @@ fn run_libreoffice(
     let profile = staging.join("profile");
     fs::create_dir_all(&profile)
         .map_err(|error| ConversionError::OutputDirectoryUnavailable(profile.clone(), error))?;
-    let output = Command::new(executable)
+    let output = background_command(executable)
         .args([
             "--headless",
             "--nologo",
@@ -757,7 +777,7 @@ fn run_ffmpeg(
     target: TargetFormat,
     output_path: &Path,
 ) -> Result<(), ConversionError> {
-    let mut command = Command::new(executable);
+    let mut command = background_command(executable);
     command
         .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y"])
         .arg("-i")
@@ -918,7 +938,7 @@ fn rasterize_pdf(
     output_dir: &Path,
 ) -> Result<Vec<PathBuf>, ConversionError> {
     let prefix = output_dir.join("page");
-    let mut command = Command::new(executable);
+    let mut command = background_command(executable);
     command.arg("-r").arg("300");
     match target {
         TargetFormat::Png => {

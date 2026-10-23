@@ -7,6 +7,11 @@ Bu kontrol listesi gerçek Windows Explorer ve kurulmuş NSIS paketi üzerinde
 
 1. GitHub Actions'ın `grapefruit-windows-installer` artifact'ındaki NSIS
    kurulumunu çalıştırın ve Grapefruit'u açın.
+   - Başlangıçta “Grapefruit çalışıyor” bildirimi görünmelidir.
+   - Bildirim alanının açık bölümünde veya `^` taşma menüsünde Grapefruit simgesi
+     bulunmalıdır.
+   - Uygulamayı ikinci kez açmak yeni bir arka plan işlemi başlatmamalı; çalışan
+     örneğin ana penceresini göstermelidir.
 2. Explorer'da bir dosyayı sol tuşla en az birkaç piksel sürükleyin; sürükleme
    devam ederken yalnızca `Shift` tuşuna basın.
 3. Çemberin imlecin çevresinde, ekran sınırları içinde ve şeffaf arka planla
@@ -27,6 +32,8 @@ Bu kontrol listesi gerçek Windows Explorer ve kurulmuş NSIS paketi üzerinde
   beklenir.
 - Aynı dönüşümü iki kez yapın; ikinci çıktı var olan dosyanın üzerine yazmamalı,
   `(1)` ekli yeni ad kullanmalıdır.
+- FFmpeg, Poppler veya LibreOffice çalışırken Komut İstemi/konsol penceresi
+  açılmamalıdır.
 
 ## Dosya işlemleri
 

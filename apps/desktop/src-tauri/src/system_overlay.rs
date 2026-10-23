@@ -506,6 +506,7 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
                 let mouse = device.get_mouse();
                 let keys = device.get_keys();
                 let left_pressed = mouse.button_pressed.get(1).copied().unwrap_or(false);
+                let gesture_started = left_pressed && tracker.origin.is_none();
                 let shift_pressed =
                     keys.contains(&Keycode::LShift) || keys.contains(&Keycode::RShift);
                 let control_pressed =
@@ -529,6 +530,24 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
                     drag_selection.clear();
                 }
 
+                // Capture the Shell selection on the first observed mouse-down. On the Windows
+                // desktop, the drag-image window can cover the icon by the time the pointer has
+                // crossed our drag threshold, so WindowFromPoint can no longer identify WorkerW.
+                // Explorer windows happened to work because their foreground frame remained a
+                // usable fallback; the desktop has no equivalent guarantee.
+                if gesture_started {
+                    drag_selection = match crate::windows_selection::selected_paths_at(mouse.coords)
+                    {
+                        Ok(paths) => paths,
+                        Err(error) => {
+                            eprintln!(
+                                "[windows-drag-keys] could not read source selection on mouse-down: {error}"
+                            );
+                            Vec::new()
+                        }
+                    };
+                }
+
                 let was_dragging = tracker.dragging;
                 let drag_event =
                     tracker.update(left_pressed, mouse.coords, convert_pressed, actions_pressed);
@@ -537,9 +556,9 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
                 // while it is still over the source Explorer/desktop view. This keeps the source
                 // available if the user moves over another window before pressing Shift or Ctrl,
                 // without ever probing a browser/editor drag later in the gesture.
-                if tracker.dragging && !was_dragging {
-                    drag_selection = match crate::windows_selection::selected_paths_at(mouse.coords)
-                    {
+                if tracker.dragging && !was_dragging && drag_selection.is_empty() {
+                    let source_position = tracker.origin.unwrap_or(mouse.coords);
+                    drag_selection = match crate::windows_selection::selected_paths_at(source_position) {
                         Ok(paths) => paths,
                         Err(error) => {
                             eprintln!(

@@ -13,6 +13,8 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+#[cfg(target_os = "windows")]
+use tauri_plugin_notification::NotificationExt as _;
 
 mod modifier_settings;
 mod system_overlay;
@@ -237,7 +239,7 @@ const fn kind_name(kind: FileKind) -> &'static str {
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
@@ -253,7 +255,9 @@ fn setup_desktop_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let actions = MenuItem::with_id(app, "open-actions", "Dosya İşlemleri", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Çıkış", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &convert, &actions, &quit])?;
-    let mut tray = TrayIconBuilder::with_id("grapefruit-tray")
+    let tray_icon = tauri::include_image!("./icons/icon.ico");
+    let tray = TrayIconBuilder::with_id("grapefruit-tray")
+        .icon(tray_icon)
         .tooltip("Grapefruit")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -280,16 +284,28 @@ fn setup_desktop_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 show_main_window(tray.app_handle());
             }
         });
-    if let Some(icon) = app.default_window_icon().cloned() {
-        tray = tray.icon(icon);
-    }
     tray.build(app)?;
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn notify_windows_startup(app: &tauri::AppHandle) {
+    let _ = app
+        .notification()
+        .builder()
+        .title("Grapefruit çalışıyor")
+        .body("Arka planda hazır. Dosyayı sürüklerken Shift veya Ctrl tuşuna basın.")
+        .show();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Keep this first: secondary launches must exit before they create another drag monitor.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main_window(app);
+        }))
+        .plugin(tauri_plugin_notification::init())
         .manage(OverlayRuntime::default())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -297,6 +313,8 @@ pub fn run() {
         .setup(|app| {
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             setup_desktop_tray(app)?;
+            #[cfg(target_os = "windows")]
+            notify_windows_startup(app.handle());
             #[cfg(not(any(target_os = "windows", target_os = "linux")))]
             if let Some(main) = app.get_webview_window("main") {
                 main.show()?;
@@ -307,18 +325,18 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if window.label() == "main" {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    #[cfg(any(target_os = "windows", target_os = "linux"))]
-                    {
-                        api.prevent_close();
-                        let _ = window.hide();
-                    }
-                    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-                    {
-                        let _ = api;
-                        window.app_handle().exit(0);
-                    }
+            if window.label() == "main"
+                && let tauri::WindowEvent::CloseRequested { api, .. } = event
+            {
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+                {
+                    let _ = api;
+                    window.app_handle().exit(0);
                 }
             }
         })
