@@ -88,9 +88,9 @@ cargo run -p file-formatter-cli -- convert --to pdf rapor.docx
 
 Hazır preview paketleri:
 
-- [Windows x64 `.exe`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.3/Grapefruit_0.3.3_x64-setup.exe)
-- [Ubuntu/Debian amd64 `.deb`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.3/Grapefruit_0.3.3_amd64.deb)
-- [Sürüm notları ve SHA-256 değerleri](https://github.com/EfeDogan/grapefruit/releases/tag/v0.3.3)
+- [Windows x64 `.exe`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.4/Grapefruit_0.3.4_x64-setup.exe)
+- [Ubuntu/Debian amd64 `.deb`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.4/Grapefruit_0.3.4_amd64.deb)
+- [Sürüm notları ve SHA-256 değerleri](https://github.com/EfeDogan/grapefruit/releases/tag/v0.3.4)
 
 Linux paketi GNOME Shell ve Nautilus bütünleştirme dosyalarını sistem genelinde
 kurar. Paket, eski File Formatter uzantısını Grapefruit entegrasyonuna taşır ve
