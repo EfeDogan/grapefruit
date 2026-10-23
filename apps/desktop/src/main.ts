@@ -158,6 +158,7 @@ let processing = false;
 let menuMode: MenuMode = "convert";
 let conversionTargets: string[] = [];
 let overlayHideTimer: number | null = null;
+let dropCommitted = false;
 
 const segments: SVGPathElement[] = [];
 const segmentLabels: SVGTextElement[] = [];
@@ -173,7 +174,7 @@ for (let index = 0; index < 6; index += 1) {
     if (processing || selectedPaths.length === 0) return;
     hoveredSector = index;
     updateSegmentState();
-    void handleDrop();
+    void commitDrop();
   });
   segmentGroup.append(path);
   segments.push(path);
@@ -225,7 +226,16 @@ if (runningInTauri) {
     setMenuMode(event.payload, true);
   });
   await listen<ExternalSelection>("overlay-selection", (event) => {
+    dropCommitted = false;
     void loadExternalSelection(event.payload.paths);
+  });
+  await listen<Point>("overlay-pointer", (event) => {
+    if (isOverlay && !processing) updatePointer(event.payload);
+  });
+  await listen<Point>("overlay-release", (event) => {
+    if (!isOverlay || processing || dropCommitted) return;
+    updatePointer(event.payload);
+    void commitDrop();
   });
   await listen<ShortcutStatus>("global-shortcut-status", (event) => {
     renderShortcutStatus(event.payload);
@@ -248,6 +258,7 @@ if (runningInTauri) {
     switch (event.payload.type) {
       case "enter":
         cancelOverlayHide();
+        dropCommitted = false;
         selectedPaths = event.payload.paths;
         stage.classList.add("is-dragging");
         updatePointer(event.payload.position);
@@ -259,7 +270,7 @@ if (runningInTauri) {
       case "drop":
         selectedPaths = event.payload.paths;
         updatePointer(event.payload.position);
-        await handleDrop();
+        await commitDrop();
         break;
       case "leave":
         if (isOverlay) {
@@ -275,6 +286,7 @@ if (runningInTauri) {
 
 async function loadExternalSelection(paths: string[]): Promise<void> {
   if (processing) return;
+  dropCommitted = false;
   if (paths.length === 0) {
     resetDragState();
     return;
@@ -381,6 +393,18 @@ async function handleDrop(): Promise<void> {
   } else {
     await handleConversionDrop(currentAnalysis);
   }
+}
+
+async function commitDrop(): Promise<void> {
+  if (processing || dropCommitted) return;
+  dropCommitted = true;
+  if (selectedPaths.length === 0) {
+    resetDragState(false);
+    if (isOverlay) scheduleOverlayHide(250);
+    return;
+  }
+  await handleDrop();
+  if (isOverlay && !processing) scheduleOverlayHide(900);
 }
 
 async function handleConversionDrop(currentAnalysis: AnalyzeResponse): Promise<void> {

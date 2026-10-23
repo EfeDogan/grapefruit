@@ -141,6 +141,14 @@ pub struct ExternalSelection {
     paths: Vec<String>,
 }
 
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OverlayPointer {
+    x: f64,
+    y: f64,
+}
+
 pub struct OverlayRuntime {
     mode: Mutex<Option<OverlayMenuMode>>,
     external_selection: Mutex<Vec<String>>,
@@ -356,6 +364,7 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
             let device = DeviceState::new();
             let mut tracker = DragKeyTracker::default();
             let mut hide_after: Option<Instant> = None;
+            let mut last_pointer: Option<(i32, i32)> = None;
 
             loop {
                 let mouse = device.get_mouse();
@@ -375,9 +384,24 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
                         mode,
                         initial: true,
                     }) => {
-                        if let Err(error) = present_overlay(&app, mode) {
+                        let selection = match crate::windows_selection::selected_paths() {
+                            Ok(paths) => paths,
+                            Err(error) => {
+                                eprintln!(
+                                    "[windows-drag-keys] could not read Explorer selection: {error}"
+                                );
+                                Vec::new()
+                            }
+                        };
+                        let result = if selection.is_empty() {
+                            present_overlay(&app, mode)
+                        } else {
+                            present_overlay_with_selection(&app, mode, &selection)
+                        };
+                        if let Err(error) = result {
                             eprintln!("[windows-drag-keys] could not open overlay: {error}");
                         }
+                        last_pointer = None;
                     }
                     Some(DragKeyEvent::Activate {
                         mode,
@@ -388,9 +412,18 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
                         }
                     }
                     Some(DragKeyEvent::Release) => {
-                        hide_after = Some(Instant::now() + Duration::from_secs(1));
+                        let _ = emit_overlay_pointer(&app, "overlay-release", mouse.coords);
+                        // The frontend normally closes itself after finishing the operation. This
+                        // is a hard cleanup in case WebView event delivery fails unexpectedly.
+                        hide_after = Some(Instant::now() + Duration::from_secs(5));
+                        last_pointer = None;
                     }
                     None => {}
+                }
+
+                if tracker.menu_active && last_pointer != Some(mouse.coords) {
+                    let _ = emit_overlay_pointer(&app, "overlay-pointer", mouse.coords);
+                    last_pointer = Some(mouse.coords);
                 }
 
                 if hide_after.is_some_and(|deadline| Instant::now() >= deadline) {
@@ -401,6 +434,29 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
             }
         })
         .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn emit_overlay_pointer(
+    app: &AppHandle,
+    event: &str,
+    screen_position: (i32, i32),
+) -> Result<(), String> {
+    let overlay = app
+        .get_webview_window("overlay")
+        .ok_or("overlay window is unavailable")?;
+    let origin = overlay
+        .outer_position()
+        .map_err(|error| error.to_string())?;
+    overlay
+        .emit(
+            event,
+            OverlayPointer {
+                x: f64::from(screen_position.0 - origin.x),
+                y: f64::from(screen_position.1 - origin.y),
+            },
+        )
         .map_err(|error| error.to_string())
 }
 
@@ -627,12 +683,15 @@ fn present_overlay(app: &AppHandle, mode: OverlayMenuMode) -> Result<(), String>
     present_overlay_mode(app, mode)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn present_overlay_with_selection(
     app: &AppHandle,
     mode: OverlayMenuMode,
     paths: &[String],
 ) -> Result<(), String> {
+    if let Ok(mut selection) = app.state::<OverlayRuntime>().external_selection.lock() {
+        *selection = paths.to_vec();
+    }
     let overlay = app
         .get_webview_window("overlay")
         .ok_or("overlay window is unavailable")?;

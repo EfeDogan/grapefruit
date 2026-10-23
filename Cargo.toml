@@ -11,4 +11,6 @@ version = "0.3.0"
 edition = "2024"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# Windows Shell integration is isolated in one small, reviewed FFI module.
+# Keep unsafe code denied everywhere else while allowing that module to opt in.
+unsafe_code = "deny"
