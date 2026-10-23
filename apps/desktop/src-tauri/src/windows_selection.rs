@@ -13,7 +13,7 @@ use windows::Win32::UI::Shell::{
     DragQueryFileW, HDROP, IShellBrowser, IShellWindows, SID_STopLevelBrowser, SVGIO_SELECTION,
     SWC_DESKTOP, SWFO_NEEDDISPATCH, ShellWindows,
 };
-use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetForegroundWindow};
 use windows::core::Interface;
 
 struct ComApartment;
@@ -72,6 +72,13 @@ pub fn selected_paths() -> Result<Vec<String>, String> {
         }
     }
 
+    // Never fall back to the desktop merely because it still has a selected icon. Without this
+    // foreground check, selecting text in an unrelated application could reuse that stale desktop
+    // selection and incorrectly open Grapefruit.
+    if !is_desktop_window(foreground) {
+        return Ok(Vec::new());
+    }
+
     // The desktop is a Shell view but is not guaranteed to appear in the normal ShellWindows
     // enumeration. Query it explicitly as the fallback source.
     let mut desktop_hwnd = 0;
@@ -89,6 +96,22 @@ pub fn selected_paths() -> Result<Vec<String>, String> {
     .map_err(|error| format!("could not access the Windows desktop selection: {error}"))?;
     let browser = shell_browser(&desktop)?;
     paths_from_browser(&browser)
+}
+
+fn is_desktop_window(window: windows::Win32::Foundation::HWND) -> bool {
+    if window.0.is_null() {
+        return false;
+    }
+    let mut buffer = [0_u16; 256];
+    // SAFETY: The buffer is writable for its full length and HWND is borrowed from Windows.
+    let length = unsafe { GetClassNameW(window, &mut buffer) };
+    if length <= 0 {
+        return false;
+    }
+    let class_name = OsString::from_wide(&buffer[..length as usize])
+        .to_string_lossy()
+        .into_owned();
+    class_name.eq_ignore_ascii_case("Progman") || class_name.eq_ignore_ascii_case("WorkerW")
 }
 
 fn shell_browser(

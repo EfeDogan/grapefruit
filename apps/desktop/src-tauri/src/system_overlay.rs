@@ -112,6 +112,11 @@ impl DragKeyTracker {
         self.previous_actions = actions_pressed;
         event
     }
+
+    #[cfg(target_os = "windows")]
+    fn reject_activation(&mut self) {
+        self.menu_active = false;
+    }
 }
 
 impl OverlayMenuMode {
@@ -287,11 +292,13 @@ impl LegacyLinuxDesktopIntegration {
     }
 
     fn show_overlay(&self, mode: &str) -> bool {
-        let opened = self.current.show_overlay(mode);
-        if opened {
-            set_overlay_title(&self.current.app, "File Formatter Quick Menu");
-        }
-        opened
+        let _ = mode;
+        // A GNOME Shell session can keep the pre-Grapefruit extension module in memory until the
+        // next login. That module called ShowOverlay for every mouse drag, including text
+        // selection in browsers and editors. Refuse that ambiguous legacy call; Nautilus still
+        // uses ShowForSelection, while the updated extension calls the current interface only
+        // after confirming the source is Files or the desktop.
+        false
     }
 
     fn switch_overlay_mode(&self, mode: &str) -> bool {
@@ -530,12 +537,15 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
                                 Vec::new()
                             }
                         };
-                        let result = if selection.is_empty() {
-                            present_overlay(&app, mode)
-                        } else {
+                        if selection.is_empty() {
+                            tracker.reject_activation();
+                            eprintln!(
+                                "[windows-drag-keys] ignored drag outside Explorer or without a file selection"
+                            );
+                        } else if let Err(error) =
                             present_overlay_with_selection(&app, mode, &selection)
-                        };
-                        if let Err(error) = result {
+                        {
+                            tracker.reject_activation();
                             eprintln!("[windows-drag-keys] could not open overlay: {error}");
                         }
                         last_pointer = None;

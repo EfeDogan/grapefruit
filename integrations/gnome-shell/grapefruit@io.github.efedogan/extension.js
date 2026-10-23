@@ -194,8 +194,16 @@ export default class GrapefruitDragKeys extends Extension {
 
     _activateMode(mode) {
         if (!this._dragMenuActive) {
-            const focusClass = global.display.focus_window?.get_wm_class()?.toLowerCase() ?? '';
-            this._selectionSource = focusClass.includes('nautilus');
+            const focusWindow = global.display.focus_window;
+            const focusClass = focusWindow?.get_wm_class()?.toLowerCase() ?? '';
+            const applicationId = focusWindow?.get_gtk_application_id()?.toLowerCase() ?? '';
+            const fromNautilus = focusClass.includes('nautilus') ||
+                applicationId.includes('nautilus');
+            const fromDesktop = !focusWindow || focusClass.includes('ding') ||
+                applicationId.includes('ding') || focusClass.includes('desktop-icons');
+            if (!fromNautilus && !fromDesktop)
+                return;
+            this._selectionSource = fromNautilus;
         }
 
         const now = GLib.get_monotonic_time();
@@ -237,20 +245,12 @@ export default class GrapefruitDragKeys extends Extension {
                     if (opened) {
                         this._queueOverlayPosition(pointerX, pointerY);
                     } else {
-                        this._showOverlayFallback(mode, pointerX, pointerY);
+                        this._dragMenuActive = false;
                     }
                 } catch (_error) {
-                    this._showOverlayFallback(mode, pointerX, pointerY);
+                    this._dragMenuActive = false;
                 }
             },
-        );
-    }
-
-    _showOverlayFallback(mode, pointerX, pointerY) {
-        this._callBooleanMethod(
-            'ShowOverlay',
-            new GLib.Variant('(s)', [mode]),
-            () => this._queueOverlayPosition(pointerX, pointerY),
         );
     }
 

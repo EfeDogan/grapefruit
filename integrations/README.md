@@ -6,6 +6,11 @@ The GNOME integration provides Tangerine-style modifier behavior without bypassi
 - the GNOME Shell extension watches for `Shift` or `Control` only while the primary pointer button is held during a drag from GNOME Files or the GNOME desktop;
 - both components communicate with the desktop app over the user session D-Bus.
 
+Modifier drags are intentionally ignored when the focused window is not GNOME Files or the
+desktop. A Nautilus activation must also have at least one published local file selection, so text
+selection and ordinary dragging in browsers, editors, terminals, and other applications never open
+the wheel.
+
 The first `Shift` opens the conversion wheel. While the drag continues, `Shift` switches to conversion and `Control` switches to file actions. Events are always propagated, so the integration does not swallow the original drag or keyboard input.
 
 The mappings can be swapped from Grapefruit's **Ayarlar** dialog or the GNOME Extensions preferences button. Both interfaces write the same `~/.config/grapefruit/settings.json` file, which the Shell extension reloads while it is running. Windows uses the equivalent `%APPDATA%\\Grapefruit\\settings.json` file.
