@@ -8,7 +8,7 @@ use file_formatter_core::{
 };
 use serde::{Deserialize, Serialize};
 use tauri::Manager as _;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -236,7 +236,7 @@ const fn kind_name(kind: FileKind) -> &'static str {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
@@ -245,11 +245,13 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn setup_windows_tray(app: &mut tauri::App) -> tauri::Result<()> {
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn setup_desktop_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open-main", "Grapefruit'i Aç", true, None::<&str>)?;
+    let convert = MenuItem::with_id(app, "open-convert", "Dönüştür", true, None::<&str>)?;
+    let actions = MenuItem::with_id(app, "open-actions", "Dosya İşlemleri", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Çıkış", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &convert, &actions, &quit])?;
     let mut tray = TrayIconBuilder::with_id("grapefruit-tray")
         .tooltip("Grapefruit")
         .menu(&menu)
@@ -257,6 +259,10 @@ fn setup_windows_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, event| {
             if event.id() == "open-main" {
                 show_main_window(app);
+            } else if event.id() == "open-convert" {
+                let _ = system_overlay::show_overlay(app.clone(), "convert".to_owned());
+            } else if event.id() == "open-actions" {
+                let _ = system_overlay::show_overlay(app.clone(), "actions".to_owned());
             } else if event.id() == "quit" {
                 app.exit(0);
             }
@@ -288,9 +294,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            #[cfg(target_os = "windows")]
-            setup_windows_tray(app)?;
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            setup_desktop_tray(app)?;
+            #[cfg(not(any(target_os = "windows", target_os = "linux")))]
             if let Some(main) = app.get_webview_window("main") {
                 main.show()?;
             }
@@ -302,12 +308,12 @@ pub fn run() {
         .on_window_event(|window, event| {
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    #[cfg(target_os = "windows")]
+                    #[cfg(any(target_os = "windows", target_os = "linux"))]
                     {
                         api.prevent_close();
                         let _ = window.hide();
                     }
-                    #[cfg(not(target_os = "windows"))]
+                    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
                     {
                         let _ = api;
                         window.app_handle().exit(0);
