@@ -37,7 +37,11 @@ Bu kontrol listesi gerçek Windows Explorer ve kurulmuş NSIS paketi üzerinde
 
 ## Bilinen doğrulama noktası
 
-Windows izleyicisi Explorer'a özel bir hook kullanmaz. Sol tuşla sürükleme ve
-Shift/Control birleşimi başka uygulamalarda da menüyü açabilir. Bu davranış kabul
-edilemez ölçüde sık yanlış tetikleniyorsa sonraki adım Explorer sürükleme
-bağlamını ayırt eden Windows'a özgü bir entegrasyondur.
+Windows izleyicisi menüyü yalnızca imlecin altındaki veya foreground durumundaki
+Windows Explorer/masaüstü kök penceresinde yerel bir dosya seçimi okunabildiğinde
+açar. Aşağıdaki sınırlar özellikle doğrulanmalıdır:
+
+- Windows 11'de sekmeli Explorer penceresinin aktif sekmesindeki dosya
+- Windows 10/11 masaüstünde, masaüstü foreground pencere olmasa da sürüklenen dosya
+- Tarayıcı, editör ve terminalde metin seçimi yapılırken Shift/Control ile menünün
+  açılmaması

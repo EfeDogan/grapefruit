@@ -3,6 +3,7 @@
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 
+use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::System::Com::{
     CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
     DVASPECT_CONTENT, FORMATETC, IDataObject, IServiceProvider, TYMED_HGLOBAL,
@@ -10,10 +11,12 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Ole::{CF_HDROP, ReleaseStgMedium};
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Shell::{
-    DragQueryFileW, HDROP, IShellBrowser, IShellWindows, SID_STopLevelBrowser, SVGIO_SELECTION,
-    SWC_DESKTOP, SWFO_NEEDDISPATCH, ShellWindows,
+    DragQueryFileW, HDROP, IShellBrowser, IShellWindows, IWebBrowser2, SID_STopLevelBrowser,
+    SVGIO_SELECTION, SWC_DESKTOP, SWFO_NEEDDISPATCH, ShellWindows,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetForegroundWindow};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GA_ROOT, GetAncestor, GetClassNameW, GetForegroundWindow, WindowFromPoint,
+};
 use windows::core::Interface;
 
 struct ComApartment;
@@ -40,7 +43,7 @@ impl Drop for ComApartment {
 /// Explorer's OLE drag does not reliably attach itself to a transparent WebView window that
 /// becomes visible after the drag has started. Reading the source Shell view keeps the quick menu
 /// independent from that late drop-target registration.
-pub fn selected_paths() -> Result<Vec<String>, String> {
+pub fn selected_paths_at(pointer: (i32, i32)) -> Result<Vec<String>, String> {
     let _apartment = ComApartment::initialize()?;
 
     // SAFETY: ShellWindows is a system COM local server. The apartment guard remains alive for
@@ -48,35 +51,82 @@ pub fn selected_paths() -> Result<Vec<String>, String> {
     let shell_windows: IShellWindows = unsafe { CoCreateInstance(&ShellWindows, None, CLSCTX_ALL) }
         .map_err(|error| format!("could not connect to Windows Explorer: {error}"))?;
 
+    // The Windows desktop is not guaranteed to become the foreground window when an icon is
+    // dragged. Prefer the window below the pointer, then fall back to the foreground Explorer
+    // frame. Both handles are normalized to their top-level roots before class validation.
+    let pointer_window = root_window(unsafe {
+        WindowFromPoint(POINT {
+            x: pointer.0,
+            y: pointer.1,
+        })
+    });
     // SAFETY: GetForegroundWindow has no caller-owned pointers and returns a borrowed HWND value.
-    let foreground = unsafe { GetForegroundWindow() };
-    // SAFETY: Count and Item are called on a valid IShellWindows interface in this apartment.
-    let count = unsafe { shell_windows.Count() }
-        .map_err(|error| format!("could not enumerate Explorer windows: {error}"))?;
-
-    for index in 0..count {
-        let index = VARIANT::from(index);
-        // A ShellWindows collection can change while we enumerate it; skip entries that vanished.
-        let Ok(dispatch) = (unsafe { shell_windows.Item(&index) }) else {
-            continue;
-        };
-        let Ok(browser) = shell_browser(&dispatch) else {
-            continue;
-        };
-        // SAFETY: IShellBrowser inherits IOleWindow; GetWindow only returns its owned HWND.
-        let Ok(window) = (unsafe { browser.GetWindow() }) else {
-            continue;
-        };
-        if window == foreground {
-            return paths_from_browser(&browser);
-        }
-    }
-
-    // Never fall back to the desktop merely because it still has a selected icon. Without this
-    // foreground check, selecting text in an unrelated application could reuse that stale desktop
-    // selection and incorrectly open Grapefruit.
-    if !is_desktop_window(foreground) {
+    let foreground_window = root_window(unsafe { GetForegroundWindow() });
+    let source_window = [pointer_window, foreground_window]
+        .into_iter()
+        .find(|window| {
+            window_class_name(*window).is_some_and(|class_name| {
+                is_explorer_class(&class_name) || is_desktop_class(&class_name)
+            })
+        });
+    let Some(source_window) = source_window else {
         return Ok(Vec::new());
+    };
+    let source_class = window_class_name(source_window).unwrap_or_default();
+
+    // Limit the COM lookup before touching any cached Shell selection. This keeps ordinary mouse
+    // drags in browsers and editors from reusing a selection left behind in Explorer.
+    if is_explorer_class(&source_class) {
+        // Windows 11 can expose more than one ShellWindows entry for a tabbed Explorer frame. The
+        // IWebBrowser2 HWND is the top-level frame, while IShellBrowser::GetWindow may be a tab
+        // child. Inspect every entry belonging to the foreground frame and prefer the one with an
+        // actual selection instead of returning the first (possibly inactive) tab.
+        let count = unsafe { shell_windows.Count() }
+            .map_err(|error| format!("could not enumerate Explorer windows: {error}"))?;
+        let mut matched_frame = false;
+        let mut successful_probe = false;
+        let mut last_error = None;
+
+        for index in 0..count {
+            let index = VARIANT::from(index);
+            // A ShellWindows collection can change while we enumerate it; skip entries that
+            // vanished between Count and Item.
+            let Ok(dispatch) = (unsafe { shell_windows.Item(&index) }) else {
+                continue;
+            };
+            if dispatch_root_window(&dispatch) != Some(source_window) {
+                continue;
+            }
+            matched_frame = true;
+
+            let browser = match shell_browser(&dispatch) {
+                Ok(browser) => browser,
+                Err(error) => {
+                    last_error = Some(error);
+                    continue;
+                }
+            };
+            match paths_from_browser(&browser) {
+                Ok(paths) => {
+                    successful_probe = true;
+                    if !paths.is_empty() {
+                        return Ok(paths);
+                    }
+                }
+                Err(error) => last_error = Some(error),
+            }
+        }
+
+        if successful_probe {
+            return Ok(Vec::new());
+        }
+        if matched_frame {
+            return Err(last_error
+                .unwrap_or_else(|| "could not read the active Explorer tab selection".to_owned()));
+        }
+        return Err(format!(
+            "could not match Explorer frame class {source_class} to ShellWindows"
+        ));
     }
 
     // The desktop is a Shell view but is not guaranteed to appear in the normal ShellWindows
@@ -98,19 +148,57 @@ pub fn selected_paths() -> Result<Vec<String>, String> {
     paths_from_browser(&browser)
 }
 
-fn is_desktop_window(window: windows::Win32::Foundation::HWND) -> bool {
+fn dispatch_root_window(dispatch: &windows::Win32::System::Com::IDispatch) -> Option<HWND> {
+    // IShellWindows::Item exposes an IWebBrowser2 automation object. Its HWND property identifies
+    // the top-level Explorer frame, including tabbed Explorer on Windows 11.
+    if let Ok(web_browser) = dispatch.cast::<IWebBrowser2>() {
+        if let Ok(handle) = unsafe { web_browser.HWND() } {
+            let window = HWND(handle.0 as *mut core::ffi::c_void);
+            if !window.0.is_null() {
+                return Some(root_window(window));
+            }
+        }
+    }
+
+    // Older Shell implementations may not expose IWebBrowser2 directly. Preserve the previous
+    // IOleWindow route as a normalized fallback instead of discarding an otherwise usable view.
+    let browser = shell_browser(dispatch).ok()?;
+    let window = unsafe { browser.GetWindow() }.ok()?;
+    (!window.0.is_null()).then(|| root_window(window))
+}
+
+fn root_window(window: HWND) -> HWND {
     if window.0.is_null() {
-        return false;
+        return window;
+    }
+    // SAFETY: GetAncestor only inspects the supplied borrowed window handle.
+    let root = unsafe { GetAncestor(window, GA_ROOT) };
+    if root.0.is_null() { window } else { root }
+}
+
+fn window_class_name(window: HWND) -> Option<String> {
+    if window.0.is_null() {
+        return None;
     }
     let mut buffer = [0_u16; 256];
     // SAFETY: The buffer is writable for its full length and HWND is borrowed from Windows.
     let length = unsafe { GetClassNameW(window, &mut buffer) };
     if length <= 0 {
-        return false;
+        return None;
     }
-    let class_name = OsString::from_wide(&buffer[..length as usize])
-        .to_string_lossy()
-        .into_owned();
+    Some(
+        OsString::from_wide(&buffer[..length as usize])
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+fn is_explorer_class(class_name: &str) -> bool {
+    class_name.eq_ignore_ascii_case("CabinetWClass")
+        || class_name.eq_ignore_ascii_case("ExploreWClass")
+}
+
+fn is_desktop_class(class_name: &str) -> bool {
     class_name.eq_ignore_ascii_case("Progman") || class_name.eq_ignore_ascii_case("WorkerW")
 }
 
@@ -187,4 +275,25 @@ fn paths_from_medium(
         }
     }
     Ok(paths)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognizes_supported_explorer_frame_classes() {
+        assert!(is_explorer_class("CabinetWClass"));
+        assert!(is_explorer_class("cabinetwclass"));
+        assert!(is_explorer_class("ExploreWClass"));
+        assert!(!is_explorer_class("Chrome_WidgetWin_1"));
+    }
+
+    #[test]
+    fn recognizes_only_windows_desktop_root_classes() {
+        assert!(is_desktop_class("Progman"));
+        assert!(is_desktop_class("WorkerW"));
+        assert!(is_desktop_class("workerw"));
+        assert!(!is_desktop_class("Notepad"));
+    }
 }

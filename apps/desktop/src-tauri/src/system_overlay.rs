@@ -42,6 +42,7 @@ struct DragKeyTracker {
     origin: Option<(i32, i32)>,
     dragging: bool,
     menu_active: bool,
+    activation_rejected: bool,
     previous_convert: bool,
     previous_actions: bool,
 }
@@ -62,6 +63,7 @@ impl DragKeyTracker {
             self.origin = None;
             self.dragging = false;
             self.menu_active = false;
+            self.activation_rejected = false;
             self.previous_convert = convert_pressed;
             self.previous_actions = actions_pressed;
             return event;
@@ -75,7 +77,7 @@ impl DragKeyTracker {
             self.dragging = true;
         }
 
-        let event = if self.dragging && !self.menu_active {
+        let event = if self.dragging && !self.menu_active && !self.activation_rejected {
             let mode = if convert_pressed {
                 Some(OverlayMenuMode::Convert)
             } else if actions_pressed {
@@ -113,9 +115,10 @@ impl DragKeyTracker {
         event
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", test))]
     fn reject_activation(&mut self) {
         self.menu_active = false;
+        self.activation_rejected = true;
     }
 }
 
@@ -497,6 +500,7 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
             let mut tracker = DragKeyTracker::default();
             let mut hide_after: Option<Instant> = None;
             let mut last_pointer: Option<(i32, i32)> = None;
+            let mut drag_selection = Vec::new();
 
             loop {
                 let mouse = device.get_mouse();
@@ -521,29 +525,43 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
 
                 if left_pressed {
                     hide_after = None;
+                } else {
+                    drag_selection.clear();
                 }
 
-                match tracker.update(left_pressed, mouse.coords, convert_pressed, actions_pressed) {
+                let was_dragging = tracker.dragging;
+                let drag_event =
+                    tracker.update(left_pressed, mouse.coords, convert_pressed, actions_pressed);
+
+                // Snapshot the Shell selection as soon as the pointer crosses the drag threshold,
+                // while it is still over the source Explorer/desktop view. This keeps the source
+                // available if the user moves over another window before pressing Shift or Ctrl,
+                // without ever probing a browser/editor drag later in the gesture.
+                if tracker.dragging && !was_dragging {
+                    drag_selection = match crate::windows_selection::selected_paths_at(mouse.coords)
+                    {
+                        Ok(paths) => paths,
+                        Err(error) => {
+                            eprintln!(
+                                "[windows-drag-keys] could not read Explorer selection: {error}"
+                            );
+                            Vec::new()
+                        }
+                    };
+                }
+
+                match drag_event {
                     Some(DragKeyEvent::Activate {
                         mode,
                         initial: true,
                     }) => {
-                        let selection = match crate::windows_selection::selected_paths() {
-                            Ok(paths) => paths,
-                            Err(error) => {
-                                eprintln!(
-                                    "[windows-drag-keys] could not read Explorer selection: {error}"
-                                );
-                                Vec::new()
-                            }
-                        };
-                        if selection.is_empty() {
+                        if drag_selection.is_empty() {
                             tracker.reject_activation();
                             eprintln!(
                                 "[windows-drag-keys] ignored drag outside Explorer or without a file selection"
                             );
                         } else if let Err(error) =
-                            present_overlay_with_selection(&app, mode, &selection)
+                            present_overlay_with_selection(&app, mode, &drag_selection)
                         {
                             tracker.reject_activation();
                             eprintln!("[windows-drag-keys] could not open overlay: {error}");
@@ -1106,5 +1124,19 @@ mod tests {
             Some(DragKeyEvent::Release)
         );
         assert_eq!(tracker.update(false, (108, 100), false, false), None);
+    }
+
+    #[test]
+    fn rejected_non_file_drag_does_not_retry_until_mouse_release() {
+        let mut tracker = DragKeyTracker::default();
+        tracker.update(true, (100, 100), false, false);
+        assert!(tracker.update(true, (108, 100), true, false).is_some());
+        tracker.reject_activation();
+        assert_eq!(tracker.update(true, (116, 100), true, false), None);
+        assert_eq!(tracker.update(true, (124, 100), false, true), None);
+
+        tracker.update(false, (124, 100), false, false);
+        tracker.update(true, (200, 200), false, false);
+        assert!(tracker.update(true, (208, 200), true, false).is_some());
     }
 }
