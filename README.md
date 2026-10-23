@@ -6,7 +6,7 @@
 
   [![Windows installer](https://github.com/EfeDogan/grapefruit/actions/workflows/windows.yml/badge.svg)](https://github.com/EfeDogan/grapefruit/actions/workflows/windows.yml)
   [![GitHub Pages](https://github.com/EfeDogan/grapefruit/actions/workflows/pages.yml/badge.svg)](https://efedogan.github.io/grapefruit/)
-  ![Version](https://img.shields.io/badge/version-0.3.3-f06b55)
+  ![Version](https://img.shields.io/badge/version-0.3.4-f06b55)
   ![Local processing](https://img.shields.io/badge/processing-local-3f6955)
 </div>
 
@@ -55,7 +55,7 @@ global klavye kısayolu kaydedilmez.
 | --- | --- | --- |
 | GNOME / Wayland | Kullanılabilir | Gerçek dosya sürükleme, konumlandırma ve dönüşümler doğrulandı. |
 | Linux / X11 | Kod hazır | Gerçek dosya yöneticisi kabul testi bekliyor. |
-| Windows 10/11 | Preview | Masaüstü seçimi, tray/bildirim ve konsolsuz dönüşüm yenilendi; v0.3.3 kabul testi bekliyor. |
+| Windows 10/11 | Preview | Masaüstü Shell seçimi ve yalnızca dosya sürüklerken çalışan Shift/Ctrl akışı yenilendi; v0.3.4 kabul testi bekliyor. |
 
 Windows kabul adımları [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md)
 dosyasındadır. Windows izleyicisi yalnızca masaüstü veya Explorer kaynaklı,
@@ -139,7 +139,7 @@ planlanan işler için [docs/ROADMAP.md](docs/ROADMAP.md) dosyasına bakın.
 - Kaynak dosyalar değiştirilmez.
 - Var olan çıktıların üzerine yazılmaz; çakışmada yeni ad üretilir.
 - Komutlar kabuk metnine dönüştürülmez, araçlara ayrı süreç argümanı olarak verilir.
-- Geçici çıktılar kaynakla aynı dosya sisteminde hazırlanıp atomik olarak taşınır.
+- Geçici çıktılar sistem geçici dizininde hazırlanır; yalnızca tamamlanan dosya hedefe taşınır.
 - Bir klasörün kendi içine kopyalanması veya taşınması reddedilir.
 - Her LibreOffice işi yalıtılmış kullanıcı profili kullanır.
 

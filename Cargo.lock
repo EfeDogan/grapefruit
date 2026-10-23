@@ -1261,14 +1261,14 @@ dependencies = [
 
 [[package]]
 name = "file-formatter-cli"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "file-formatter-core",
 ]
 
 [[package]]
 name = "file-formatter-core"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "dunce",
  "printpdf",
@@ -1276,7 +1276,7 @@ dependencies = [
 
 [[package]]
 name = "file-formatter-desktop"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "ashpd",
  "device_query",
