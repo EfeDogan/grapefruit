@@ -6,7 +6,7 @@
 
   [![Windows installer](https://github.com/EfeDogan/grapefruit/actions/workflows/windows.yml/badge.svg)](https://github.com/EfeDogan/grapefruit/actions/workflows/windows.yml)
   [![GitHub Pages](https://github.com/EfeDogan/grapefruit/actions/workflows/pages.yml/badge.svg)](https://efedogan.github.io/grapefruit/)
-  ![Version](https://img.shields.io/badge/version-0.3.0-f06b55)
+  ![Version](https://img.shields.io/badge/version-0.3.1-f06b55)
   ![Local processing](https://img.shields.io/badge/processing-local-3f6955)
 </div>
 
@@ -17,9 +17,10 @@
 </picture>
 
 Grapefruit, dosya yöneticisindeki sürükle-bırak hareketini bölmeden imlecin yanında
-dairesel bir menü açar. `Shift` dönüşüm hedeflerini, `Control` hızlı dosya
-işlemlerini gösterir. Dosyalar bir sunucuya yüklenmez; dönüşümler yerel araçlarla
-bilgisayarda gerçekleştirilir.
+dairesel bir menü açar. Varsayılan olarak `Shift` dönüşüm hedeflerini, `Control`
+hızlı dosya işlemlerini gösterir; iki tuşun görevi uygulama veya GNOME uzantısı
+ayarlarından değiştirilebilir. Dosyalar bir sunucuya yüklenmez; dönüşümler yerel
+araçlarla bilgisayarda gerçekleştirilir.
 
 > [Proje sayfasını aç →](https://efedogan.github.io/grapefruit/)
 
@@ -43,8 +44,9 @@ dosyayı klasörde gösterme ve bulunduğu konumda terminal açma işlevlerini i
 3. İmlecin yanında açılan çemberde hedefin üzerine bırak.
 
 Açık menüde `Shift` ve `Control` arasında geçiş yapılabilir. Menü ilk açıldığı
-konumu korur ve ekran sınırlarının dışına taşmaz. `Ctrl+Shift+F` ile
-`Ctrl+Shift+A`, platform entegrasyonu kullanılamadığında yedek kısayollardır.
+konumu korur ve ekran sınırlarının dışına taşmaz. Uygulamanın **Ayarlar**
+penceresinden tuşlar yer değiştirilebilir. `Ctrl+Shift+F` ile `Ctrl+Shift+A`,
+platform entegrasyonu kullanılamadığında yedek kısayollardır.
 
 ## Platform durumu
 
@@ -52,7 +54,7 @@ konumu korur ve ekran sınırlarının dışına taşmaz. `Ctrl+Shift+F` ile
 | --- | --- | --- |
 | GNOME / Wayland | Kullanılabilir | Gerçek dosya sürükleme, konumlandırma ve dönüşümler doğrulandı. |
 | Linux / X11 | Kod hazır | Gerçek dosya yöneticisi kabul testi bekliyor. |
-| Windows 10/11 | Preview | Shift/Ctrl durum makinesi ve NSIS hattı hazır; Explorer kabul testi bekliyor. |
+| Windows 10/11 | Preview | Explorer seçimi, hover/bırakma ve Shift/Ctrl izleyicisi hazır; v0.3.1 kabul testi bekliyor. |
 
 Windows kabul adımları [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md)
 dosyasındadır. Windows izleyicisi şimdilik Explorer'a özel hook kullanmadığından,
@@ -85,13 +87,13 @@ cargo run -p file-formatter-cli -- convert --to pdf rapor.docx
 
 Hazır preview paketleri:
 
-- [Windows x64 `.exe`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.0/Grapefruit_0.3.0_x64-setup.exe)
-- [Ubuntu/Debian amd64 `.deb`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.0/Grapefruit_0.3.0_amd64.deb)
-- [Sürüm notları ve SHA-256 değerleri](https://github.com/EfeDogan/grapefruit/releases/tag/v0.3.0)
+- [Windows x64 `.exe`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.1/Grapefruit_0.3.1_x64-setup.exe)
+- [Ubuntu/Debian amd64 `.deb`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.1/Grapefruit_0.3.1_amd64.deb)
+- [Sürüm notları ve SHA-256 değerleri](https://github.com/EfeDogan/grapefruit/releases/tag/v0.3.1)
 
 Linux paketi GNOME Shell ve Nautilus bütünleştirme dosyalarını sistem genelinde
-kurar. GNOME uzantısını kurulumdan sonra kullanıcı hesabında etkinleştirmek
-gerekir.
+kurar. v0.3.1, eski File Formatter uzantısını Grapefruit entegrasyonuna taşır ve
+uygulamayı pencere açık kalmadan sistem tepsisinde çalıştırır.
 
 Windows paketini yerelde üretmek için:
 
