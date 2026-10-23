@@ -6,7 +6,7 @@
 
   [![Windows installer](https://github.com/EfeDogan/grapefruit/actions/workflows/windows.yml/badge.svg)](https://github.com/EfeDogan/grapefruit/actions/workflows/windows.yml)
   [![GitHub Pages](https://github.com/EfeDogan/grapefruit/actions/workflows/pages.yml/badge.svg)](https://efedogan.github.io/grapefruit/)
-  ![Version](https://img.shields.io/badge/version-0.3.1-f06b55)
+  ![Version](https://img.shields.io/badge/version-0.3.2-f06b55)
   ![Local processing](https://img.shields.io/badge/processing-local-3f6955)
 </div>
 
@@ -54,11 +54,11 @@ platform entegrasyonu kullanılamadığında yedek kısayollardır.
 | --- | --- | --- |
 | GNOME / Wayland | Kullanılabilir | Gerçek dosya sürükleme, konumlandırma ve dönüşümler doğrulandı. |
 | Linux / X11 | Kod hazır | Gerçek dosya yöneticisi kabul testi bekliyor. |
-| Windows 10/11 | Preview | Explorer seçimi, hover/bırakma ve Shift/Ctrl izleyicisi hazır; v0.3.1 kabul testi bekliyor. |
+| Windows 10/11 | Preview | Masaüstü ve sekmeli Explorer kaynak algılama yenilendi; v0.3.2 kabul testi bekliyor. |
 
 Windows kabul adımları [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md)
-dosyasındadır. Windows izleyicisi şimdilik Explorer'a özel hook kullanmadığından,
-başka bir uygulamadaki sol tuş sürüklemesi sırasında da açılabilir.
+dosyasındadır. Windows izleyicisi yalnızca masaüstü veya Explorer kaynaklı,
+yerel dosya seçimi doğrulanmış sürüklemeleri kabul eder.
 
 ## Yerel geliştirme
 
@@ -87,12 +87,12 @@ cargo run -p file-formatter-cli -- convert --to pdf rapor.docx
 
 Hazır preview paketleri:
 
-- [Windows x64 `.exe`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.1/Grapefruit_0.3.1_x64-setup.exe)
-- [Ubuntu/Debian amd64 `.deb`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.1/Grapefruit_0.3.1_amd64.deb)
-- [Sürüm notları ve SHA-256 değerleri](https://github.com/EfeDogan/grapefruit/releases/tag/v0.3.1)
+- [Windows x64 `.exe`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.2/Grapefruit_0.3.2_x64-setup.exe)
+- [Ubuntu/Debian amd64 `.deb`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.2/Grapefruit_0.3.2_amd64.deb)
+- [Sürüm notları ve SHA-256 değerleri](https://github.com/EfeDogan/grapefruit/releases/tag/v0.3.2)
 
 Linux paketi GNOME Shell ve Nautilus bütünleştirme dosyalarını sistem genelinde
-kurar. v0.3.1, eski File Formatter uzantısını Grapefruit entegrasyonuna taşır ve
+kurar. v0.3.2, eski File Formatter uzantısını Grapefruit entegrasyonuna taşır ve
 uygulamayı pencere açık kalmadan sistem tepsisinde çalıştırır.
 
 Windows paketini yerelde üretmek için:
