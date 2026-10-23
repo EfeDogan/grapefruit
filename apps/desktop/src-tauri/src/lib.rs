@@ -14,13 +14,14 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
+mod modifier_settings;
 mod system_overlay;
 #[cfg(target_os = "windows")]
 mod windows_selection;
 
 use system_overlay::{
-    OverlayRuntime, current_overlay_mode, current_overlay_selection, global_shortcut_status,
-    hide_overlay, show_overlay,
+    OverlayRuntime, current_overlay_mode, current_overlay_selection, get_modifier_settings,
+    global_shortcut_status, hide_overlay, set_modifier_settings, show_overlay,
 };
 
 #[derive(Debug, Serialize)]
@@ -330,7 +331,9 @@ pub fn run() {
             hide_overlay,
             current_overlay_mode,
             current_overlay_selection,
-            global_shortcut_status
+            global_shortcut_status,
+            get_modifier_settings,
+            set_modifier_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running Grapefruit");

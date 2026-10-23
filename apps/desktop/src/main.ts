@@ -8,6 +8,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import "./styles.css";
 
 type MenuMode = "convert" | "actions";
+type ModifierKey = "shift" | "control";
 type ActionId = "copy-path" | "copy" | "move" | "reveal" | "terminal";
 
 type AnalyzeResponse = {
@@ -30,6 +31,10 @@ type ShortcutStatus = {
   convertShortcut: string;
   actionsShortcut: string;
   detail: string;
+};
+type ModifierSettings = {
+  convertModifier: ModifierKey;
+  actionsModifier: ModifierKey;
 };
 
 const runningInTauri = "__TAURI_INTERNALS__" in window;
@@ -70,6 +75,7 @@ app.innerHTML = `
         <span>Grapefruit</span>
       </a>
       <div class="topbar-actions">
+        <button id="open-settings" class="settings-launch" type="button">Ayarlar</button>
         <button id="open-overlay" class="overlay-launch" type="button">Sistem menüsünü aç</button>
         <div class="privacy-pill"><span></span> Yerel işleme</div>
       </div>
@@ -86,10 +92,10 @@ app.innerHTML = `
       <div class="stage-grid" aria-hidden="true"></div>
       <div class="shortcut-row" aria-label="Menü kısayolları">
         <button id="convert-mode" class="shortcut active" type="button" aria-pressed="true">
-          <kbd>⇧</kbd><span><strong>Dönüştür</strong><small>Shift ile seç</small></span>
+          <kbd id="convert-key">⇧</kbd><span><strong>Dönüştür</strong><small id="convert-key-help">Shift ile seç</small></span>
         </button>
         <button id="actions-mode" class="shortcut" type="button" aria-pressed="false">
-          <kbd>Ctrl</kbd><span><strong>Dosya işlemleri</strong><small>Control ile seç</small></span>
+          <kbd id="actions-key">Ctrl</kbd><span><strong>Dosya işlemleri</strong><small id="actions-key-help">Ctrl ile seç</small></span>
         </button>
       </div>
 
@@ -130,6 +136,35 @@ app.innerHTML = `
       <span>Kopyalama ve taşıma mevcut hedeflerin üzerine yazmaz</span>
     </footer>
   </main>
+
+  <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+    <form id="settings-form" method="dialog">
+      <div class="settings-heading">
+        <div>
+          <p class="eyebrow">HIZLI MENÜ</p>
+          <h2 id="settings-title">Tuş ayarları</h2>
+        </div>
+        <button class="dialog-close" type="button" data-close-settings aria-label="Ayarları kapat">×</button>
+      </div>
+      <p class="settings-copy">Dosya sürüklerken çemberi açan tuşu seç. Diğer işlev otomatik olarak kalan tuşa atanır.</p>
+      <label class="settings-field" for="convert-modifier">
+        <span><strong>Dönüştürme menüsü</strong><small>Çemberi bu tuşla açar.</small></span>
+        <select id="convert-modifier" name="convertModifier">
+          <option value="shift">Shift</option>
+          <option value="control">Ctrl</option>
+        </select>
+      </label>
+      <div class="settings-field settings-readonly">
+        <span><strong>Dosya işlemleri menüsü</strong><small>Dönüştürme tuşunun diğeridir.</small></span>
+        <kbd id="actions-modifier-preview">Ctrl</kbd>
+      </div>
+      <p id="settings-feedback" class="settings-feedback" aria-live="polite"></p>
+      <div class="settings-actions">
+        <button class="secondary-button" type="button" data-close-settings>Vazgeç</button>
+        <button class="primary-button" type="submit" value="default">Kaydet</button>
+      </div>
+    </form>
+  </dialog>
 `;
 
 const stage = requiredElement<HTMLElement>("#drop-stage");
@@ -144,6 +179,16 @@ const statusDetail = requiredElement<HTMLElement>("#status-detail");
 const convertModeButton = requiredElement<HTMLButtonElement>("#convert-mode");
 const actionsModeButton = requiredElement<HTMLButtonElement>("#actions-mode");
 const openOverlayButton = requiredElement<HTMLButtonElement>("#open-overlay");
+const openSettingsButton = requiredElement<HTMLButtonElement>("#open-settings");
+const settingsDialog = requiredElement<HTMLDialogElement>("#settings-dialog");
+const settingsForm = requiredElement<HTMLFormElement>("#settings-form");
+const convertModifierSelect = requiredElement<HTMLSelectElement>("#convert-modifier");
+const actionsModifierPreview = requiredElement<HTMLElement>("#actions-modifier-preview");
+const settingsFeedback = requiredElement<HTMLElement>("#settings-feedback");
+const convertKey = requiredElement<HTMLElement>("#convert-key");
+const actionsKey = requiredElement<HTMLElement>("#actions-key");
+const convertKeyHelp = requiredElement<HTMLElement>("#convert-key-help");
+const actionsKeyHelp = requiredElement<HTMLElement>("#actions-key-help");
 const globalStatus = requiredElement<HTMLElement>("#global-status");
 const selectionPreview = requiredElement<HTMLElement>("#selection-preview");
 const selectionThumbnail = requiredElement<HTMLImageElement>("#selection-thumbnail");
@@ -159,6 +204,11 @@ let menuMode: MenuMode = "convert";
 let conversionTargets: string[] = [];
 let overlayHideTimer: number | null = null;
 let dropCommitted = false;
+let modifierSettings: ModifierSettings = {
+  convertModifier: "shift",
+  actionsModifier: "control",
+};
+let shortcutStatus: ShortcutStatus | null = null;
 
 const segments: SVGPathElement[] = [];
 const segmentLabels: SVGTextElement[] = [];
@@ -215,9 +265,24 @@ actionsModeButton.addEventListener("click", () => setMenuMode("actions"));
 openOverlayButton.addEventListener("click", () => {
   void invoke("show_overlay", { mode: menuMode });
 });
+openSettingsButton.addEventListener("click", () => {
+  convertModifierSelect.value = modifierSettings.convertModifier;
+  renderSettingsPreview();
+  settingsFeedback.textContent = "";
+  settingsDialog.showModal();
+});
+convertModifierSelect.addEventListener("change", renderSettingsPreview);
+document.querySelectorAll<HTMLElement>("[data-close-settings]").forEach((button) => {
+  button.addEventListener("click", () => settingsDialog.close());
+});
+settingsForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void saveModifierSettings();
+});
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Shift") setMenuMode("convert");
-  if (event.key === "Control") setMenuMode("actions");
+  const pressed = event.key === "Shift" ? "shift" : event.key === "Control" ? "control" : null;
+  if (pressed === modifierSettings.convertModifier) setMenuMode("convert");
+  if (pressed === modifierSettings.actionsModifier) setMenuMode("actions");
   if (event.key === "Escape" && isOverlay) void hideSystemOverlay();
 });
 
@@ -240,7 +305,11 @@ if (runningInTauri) {
   await listen<ShortcutStatus>("global-shortcut-status", (event) => {
     renderShortcutStatus(event.payload);
   });
+  await listen<ModifierSettings>("modifier-settings", (event) => {
+    applyModifierSettings(event.payload);
+  });
 
+  applyModifierSettings(await invoke<ModifierSettings>("get_modifier_settings"));
   const status = await invoke<ShortcutStatus>("global_shortcut_status");
   renderShortcutStatus(status);
   if (isOverlay) {
@@ -589,12 +658,51 @@ function setStatus(icon: string, title: string, detail: string, state: string): 
 }
 
 function renderShortcutStatus(status: ShortcutStatus): void {
-  globalStatus.classList.add("is-ready");
-  globalStatus.classList.remove("is-error");
-  globalStatus.textContent = "Dosyayı sürüklerken Shift: dönüştür • Ctrl: dosya işlemleri";
+  shortcutStatus = status;
+  globalStatus.classList.toggle("is-ready", status.ready);
+  globalStatus.classList.toggle("is-error", !status.ready);
+  globalStatus.textContent = `Dosyayı sürüklerken ${modifierLabel(modifierSettings.convertModifier)}: dönüştür • ${modifierLabel(modifierSettings.actionsModifier)}: dosya işlemleri`;
   globalStatus.title = status.ready
     ? `Sistem kısayolları: ${status.convertShortcut} / ${status.actionsShortcut} — ${status.detail}`
     : `${status.backend} — ${status.detail}`;
+}
+
+function modifierLabel(modifier: ModifierKey): string {
+  return modifier === "shift" ? "Shift" : "Ctrl";
+}
+
+function applyModifierSettings(settings: ModifierSettings): void {
+  modifierSettings = settings;
+  convertModifierSelect.value = settings.convertModifier;
+  renderSettingsPreview();
+  convertKey.textContent = settings.convertModifier === "shift" ? "⇧" : "Ctrl";
+  actionsKey.textContent = settings.actionsModifier === "shift" ? "⇧" : "Ctrl";
+  convertKeyHelp.textContent = `${modifierLabel(settings.convertModifier)} ile seç`;
+  actionsKeyHelp.textContent = `${modifierLabel(settings.actionsModifier)} ile seç`;
+  if (shortcutStatus) renderShortcutStatus(shortcutStatus);
+}
+
+function renderSettingsPreview(): void {
+  const actionsModifier: ModifierKey = convertModifierSelect.value === "control" ? "shift" : "control";
+  actionsModifierPreview.textContent = modifierLabel(actionsModifier);
+}
+
+async function saveModifierSettings(): Promise<void> {
+  const convertModifier = convertModifierSelect.value as ModifierKey;
+  settingsFeedback.textContent = "Kaydediliyor…";
+  try {
+    const settings = runningInTauri
+      ? await invoke<ModifierSettings>("set_modifier_settings", { convertModifier })
+      : {
+          convertModifier,
+          actionsModifier: convertModifier === "shift" ? "control" : "shift",
+        } satisfies ModifierSettings;
+    applyModifierSettings(settings);
+    settingsFeedback.textContent = "Tuşlar güncellendi.";
+    window.setTimeout(() => settingsDialog.close(), 450);
+  } catch (error) {
+    settingsFeedback.textContent = `Ayar kaydedilemedi: ${String(error)}`;
+  }
 }
 
 function scheduleOverlayHide(delay: number): void {

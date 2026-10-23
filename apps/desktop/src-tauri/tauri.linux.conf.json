@@ -21,6 +21,9 @@
         ],
         "files": {
           "/usr/share/gnome-shell/extensions/grapefruit@io.github.efedogan": "../../../integrations/gnome-shell/grapefruit@io.github.efedogan/",
+          "/usr/share/gnome-shell/extensions/file-formatter@io.fileformatter.desktop/extension.js": "../../../integrations/gnome-shell/grapefruit@io.github.efedogan/extension.js",
+          "/usr/share/gnome-shell/extensions/file-formatter@io.fileformatter.desktop/prefs.js": "../../../integrations/gnome-shell/grapefruit@io.github.efedogan/prefs.js",
+          "/usr/share/gnome-shell/extensions/file-formatter@io.fileformatter.desktop/metadata.json": "../../../integrations/gnome-shell/legacy-metadata.json",
           "/usr/share/nautilus-python/extensions/grapefruit.py": "../../../integrations/nautilus/grapefruit.py",
           "/usr/share/doc/io-github-efedogan-grapefruit/README.integration.md": "../../../integrations/README.md"
         },

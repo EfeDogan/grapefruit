@@ -1,9 +1,11 @@
-#[cfg(target_os = "linux")]
-use std::path::PathBuf;
 use std::sync::Mutex;
+#[cfg(target_os = "linux")]
+use std::{fs, path::PathBuf, process::Command};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
+
+use crate::modifier_settings::{self as modifier_config, ModifierSettings};
 
 const CONVERT_SHORTCUT: &str = "Ctrl+Shift+F";
 const ACTIONS_SHORTCUT: &str = "Ctrl+Shift+A";
@@ -13,6 +15,10 @@ const APP_ID: &str = "io.github.efedogan.grapefruit";
 const INTEGRATION_BUS_NAME: &str = "io.github.efedogan.grapefruit.Integration";
 #[cfg(target_os = "linux")]
 const INTEGRATION_OBJECT_PATH: &str = "/io/github/efedogan/grapefruit/Integration";
+#[cfg(target_os = "linux")]
+const LEGACY_INTEGRATION_BUS_NAME: &str = "io.fileformatter.desktop.Integration";
+#[cfg(target_os = "linux")]
+const LEGACY_INTEGRATION_OBJECT_PATH: &str = "/io/fileformatter/desktop/Integration";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OverlayMenuMode {
@@ -36,8 +42,8 @@ struct DragKeyTracker {
     origin: Option<(i32, i32)>,
     dragging: bool,
     menu_active: bool,
-    previous_shift: bool,
-    previous_control: bool,
+    previous_convert: bool,
+    previous_actions: bool,
 }
 
 #[cfg(any(target_os = "windows", test))]
@@ -48,16 +54,16 @@ impl DragKeyTracker {
         &mut self,
         left_pressed: bool,
         position: (i32, i32),
-        shift_pressed: bool,
-        control_pressed: bool,
+        convert_pressed: bool,
+        actions_pressed: bool,
     ) -> Option<DragKeyEvent> {
         if !left_pressed {
             let event = self.menu_active.then_some(DragKeyEvent::Release);
             self.origin = None;
             self.dragging = false;
             self.menu_active = false;
-            self.previous_shift = shift_pressed;
-            self.previous_control = control_pressed;
+            self.previous_convert = convert_pressed;
+            self.previous_actions = actions_pressed;
             return event;
         }
 
@@ -70,9 +76,9 @@ impl DragKeyTracker {
         }
 
         let event = if self.dragging && !self.menu_active {
-            let mode = if shift_pressed {
+            let mode = if convert_pressed {
                 Some(OverlayMenuMode::Convert)
-            } else if control_pressed {
+            } else if actions_pressed {
                 Some(OverlayMenuMode::Actions)
             } else {
                 None
@@ -85,12 +91,12 @@ impl DragKeyTracker {
                 }
             })
         } else if self.dragging && self.menu_active {
-            if shift_pressed && !self.previous_shift {
+            if convert_pressed && !self.previous_convert {
                 Some(DragKeyEvent::Activate {
                     mode: OverlayMenuMode::Convert,
                     initial: false,
                 })
-            } else if control_pressed && !self.previous_control {
+            } else if actions_pressed && !self.previous_actions {
                 Some(DragKeyEvent::Activate {
                     mode: OverlayMenuMode::Actions,
                     initial: false,
@@ -102,8 +108,8 @@ impl DragKeyTracker {
             None
         };
 
-        self.previous_shift = shift_pressed;
-        self.previous_control = control_pressed;
+        self.previous_convert = convert_pressed;
+        self.previous_actions = actions_pressed;
         event
     }
 }
@@ -152,6 +158,7 @@ struct OverlayPointer {
 pub struct OverlayRuntime {
     mode: Mutex<Option<OverlayMenuMode>>,
     external_selection: Mutex<Vec<String>>,
+    modifier_settings: Mutex<ModifierSettings>,
     shortcut_status: Mutex<ShortcutStatus>,
 }
 
@@ -160,6 +167,7 @@ impl Default for OverlayRuntime {
         Self {
             mode: Mutex::new(None),
             external_selection: Mutex::new(Vec::new()),
+            modifier_settings: Mutex::new(modifier_config::load()),
             shortcut_status: Mutex::new(ShortcutStatus {
                 backend: "initializing".to_owned(),
                 ready: false,
@@ -175,6 +183,12 @@ impl Default for OverlayRuntime {
 #[derive(Clone)]
 struct LinuxDesktopIntegration {
     app: AppHandle,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone)]
+struct LegacyLinuxDesktopIntegration {
+    current: LinuxDesktopIntegration,
 }
 
 #[cfg(target_os = "linux")]
@@ -258,6 +272,45 @@ impl LinuxDesktopIntegration {
 }
 
 #[cfg(target_os = "linux")]
+#[ashpd::zbus::interface(name = "io.fileformatter.desktop.Integration1")]
+impl LegacyLinuxDesktopIntegration {
+    fn set_selection(&self, paths: Vec<String>) -> bool {
+        self.current.set_selection(paths)
+    }
+
+    fn show_for_selection(&self, mode: &str) -> bool {
+        let opened = self.current.show_for_selection(mode);
+        if opened {
+            set_overlay_title(&self.current.app, "File Formatter Quick Menu");
+        }
+        opened
+    }
+
+    fn show_overlay(&self, mode: &str) -> bool {
+        let opened = self.current.show_overlay(mode);
+        if opened {
+            set_overlay_title(&self.current.app, "File Formatter Quick Menu");
+        }
+        opened
+    }
+
+    fn switch_overlay_mode(&self, mode: &str) -> bool {
+        self.current.switch_overlay_mode(mode)
+    }
+
+    fn hide_overlay(&self) -> bool {
+        self.current.hide_overlay()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn set_overlay_title(app: &AppHandle, title: &str) {
+    if let Some(overlay) = app.get_webview_window("overlay") {
+        let _ = overlay.set_title(title);
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn local_existing_paths(paths: Vec<String>) -> Vec<String> {
     paths
         .into_iter()
@@ -270,17 +323,28 @@ fn local_existing_paths(paths: Vec<String>) -> Vec<String> {
 
 #[cfg(target_os = "linux")]
 pub fn setup_linux_desktop_integration(app: &AppHandle) {
+    if let Err(error) = upgrade_legacy_gnome_extension() {
+        eprintln!("[desktop-integration] legacy GNOME extension upgrade failed: {error}");
+    }
     let integration = LinuxDesktopIntegration { app: app.clone() };
+    let legacy_integration = LegacyLinuxDesktopIntegration {
+        current: integration.clone(),
+    };
     tauri::async_runtime::spawn(async move {
         let result = async {
             let connection = ashpd::zbus::connection::Builder::session()?
                 .name(INTEGRATION_BUS_NAME)?
                 .serve_at(INTEGRATION_OBJECT_PATH, integration)?
+                .serve_at(LEGACY_INTEGRATION_OBJECT_PATH, legacy_integration)?
                 .build()
                 .await?;
+            connection.request_name(LEGACY_INTEGRATION_BUS_NAME).await?;
             eprintln!(
-                "[desktop-integration] ready on {}{}",
-                INTEGRATION_BUS_NAME, INTEGRATION_OBJECT_PATH
+                "[desktop-integration] ready on {}{} and legacy {}{}",
+                INTEGRATION_BUS_NAME,
+                INTEGRATION_OBJECT_PATH,
+                LEGACY_INTEGRATION_BUS_NAME,
+                LEGACY_INTEGRATION_OBJECT_PATH
             );
             std::future::pending::<()>().await;
             drop(connection);
@@ -292,6 +356,67 @@ pub fn setup_linux_desktop_integration(app: &AppHandle) {
             eprintln!("[desktop-integration] setup failed: {error}");
         }
     });
+}
+
+#[cfg(target_os = "linux")]
+fn upgrade_legacy_gnome_extension() -> Result<(), String> {
+    const UUID: &str = "file-formatter@io.fileformatter.desktop";
+    const FILES: [&str; 3] = ["extension.js", "prefs.js", "metadata.json"];
+
+    let Some(home) = std::env::var_os("HOME") else {
+        return Ok(());
+    };
+    let source = PathBuf::from("/usr/share/gnome-shell/extensions").join(UUID);
+    let destination = PathBuf::from(home)
+        .join(".local/share/gnome-shell/extensions")
+        .join(UUID);
+    if !source.is_dir() || !destination.is_dir() {
+        return Ok(());
+    }
+
+    let changed = FILES.iter().try_fold(false, |changed, file| {
+        let packaged = fs::read(source.join(file))
+            .map_err(|error| format!("{file} paketten okunamadı: {error}"))?;
+        let installed = fs::read(destination.join(file)).unwrap_or_default();
+        Ok::<bool, String>(changed || packaged != installed)
+    })?;
+    if !changed {
+        return Ok(());
+    }
+
+    let was_active = Command::new("gnome-extensions")
+        .args(["info", UUID])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .is_some_and(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .any(|line| line.trim().eq_ignore_ascii_case("State: ACTIVE"))
+        });
+    fs::create_dir_all(&destination)
+        .map_err(|error| format!("eski eklenti dizini hazırlanamadı: {error}"))?;
+    for file in FILES {
+        fs::copy(source.join(file), destination.join(file))
+            .map_err(|error| format!("{file} yükseltilemedi: {error}"))?;
+    }
+
+    if was_active {
+        let _ = Command::new("gnome-extensions")
+            .args(["disable", UUID])
+            .status();
+        let status = Command::new("gnome-extensions")
+            .args(["enable", UUID])
+            .status()
+            .map_err(|error| format!("GNOME eklentisi yeniden etkinleştirilemedi: {error}"))?;
+        if !status.success() {
+            return Err(format!(
+                "GNOME eklentisi yeniden etkinleştirilemedi (çıkış kodu: {status})"
+            ));
+        }
+    }
+    eprintln!("[desktop-integration] upgraded legacy GNOME extension {UUID}");
+    Ok(())
 }
 
 pub fn setup_system_shortcuts(app: &AppHandle) {
@@ -374,12 +499,24 @@ fn setup_windows_drag_keys(app: &AppHandle) -> Result<(), String> {
                     keys.contains(&Keycode::LShift) || keys.contains(&Keycode::RShift);
                 let control_pressed =
                     keys.contains(&Keycode::LControl) || keys.contains(&Keycode::RControl);
+                let modifier_settings = app
+                    .state::<OverlayRuntime>()
+                    .modifier_settings
+                    .lock()
+                    .map(|settings| *settings)
+                    .unwrap_or_default();
+                let convert_pressed = modifier_settings
+                    .convert_modifier
+                    .is_pressed(shift_pressed, control_pressed);
+                let actions_pressed = modifier_settings
+                    .actions_modifier
+                    .is_pressed(shift_pressed, control_pressed);
 
                 if left_pressed {
                     hide_after = None;
                 }
 
-                match tracker.update(left_pressed, mouse.coords, shift_pressed, control_pressed) {
+                match tracker.update(left_pressed, mouse.coords, convert_pressed, actions_pressed) {
                     Some(DragKeyEvent::Activate {
                         mode,
                         initial: true,
@@ -467,6 +604,20 @@ fn setup_native_shortcuts(app: &AppHandle, drag_keys_ready: bool) {
 
     let convert = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyF);
     let actions = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyA);
+    let modifier_settings = app
+        .state::<OverlayRuntime>()
+        .modifier_settings
+        .lock()
+        .map(|settings| *settings)
+        .unwrap_or_default();
+    let drag_convert_shortcut = format!(
+        "{} while dragging",
+        modifier_settings.convert_modifier.label()
+    );
+    let drag_actions_shortcut = format!(
+        "{} while dragging",
+        modifier_settings.actions_modifier.label()
+    );
     let convert_for_handler = convert;
     let actions_for_handler = actions;
 
@@ -507,13 +658,13 @@ fn setup_native_shortcuts(app: &AppHandle, drag_keys_ready: bool) {
                 .to_owned(),
                 ready: true,
                 convert_shortcut: if cfg!(target_os = "windows") && drag_keys_ready {
-                    "Shift while dragging"
+                    &drag_convert_shortcut
                 } else {
                     CONVERT_SHORTCUT
                 }
                 .to_owned(),
                 actions_shortcut: if cfg!(target_os = "windows") && drag_keys_ready {
-                    "Control while dragging"
+                    &drag_actions_shortcut
                 } else {
                     ACTIONS_SHORTCUT
                 }
@@ -541,13 +692,13 @@ fn setup_native_shortcuts(app: &AppHandle, drag_keys_ready: bool) {
                     .to_owned(),
                     ready: drag_keys_ready,
                     convert_shortcut: if drag_keys_ready {
-                        "Shift while dragging"
+                        &drag_convert_shortcut
                     } else {
                         CONVERT_SHORTCUT
                     }
                     .to_owned(),
                     actions_shortcut: if drag_keys_ready {
-                        "Control while dragging"
+                        &drag_actions_shortcut
                     } else {
                         ACTIONS_SHORTCUT
                     }
@@ -855,6 +1006,32 @@ pub fn global_shortcut_status(state: State<'_, OverlayRuntime>) -> ShortcutStatu
             actions_shortcut: ACTIONS_SHORTCUT.to_owned(),
             detail: "Shortcut state is unavailable".to_owned(),
         })
+}
+
+#[tauri::command]
+pub fn get_modifier_settings(state: State<'_, OverlayRuntime>) -> ModifierSettings {
+    state
+        .modifier_settings
+        .lock()
+        .map(|settings| *settings)
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+pub fn set_modifier_settings(
+    app: AppHandle,
+    state: State<'_, OverlayRuntime>,
+    convert_modifier: String,
+) -> Result<ModifierSettings, String> {
+    let settings = ModifierSettings::from_convert_modifier(&convert_modifier)?;
+    modifier_config::save(settings)?;
+    *state
+        .modifier_settings
+        .lock()
+        .map_err(|_| "Tuş ayarı kilidi kullanılamıyor".to_owned())? = settings;
+    app.emit("modifier-settings", settings)
+        .map_err(|error| error.to_string())?;
+    Ok(settings)
 }
 
 #[cfg(test)]

@@ -29,7 +29,7 @@ body {
     #f4f1eb;
 }
 
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 
 .shell {
   width: min(1040px, calc(100% - 56px));
@@ -50,7 +50,8 @@ button, input { font: inherit; }
   gap: 10px;
 }
 
-.overlay-launch {
+.overlay-launch,
+.settings-launch {
   appearance: none;
   padding: 8px 12px;
   border: 1px solid rgba(238, 107, 59, 0.24);
@@ -62,8 +63,93 @@ button, input { font: inherit; }
   font-weight: 750;
 }
 
-.overlay-launch:hover { background: rgba(255, 231, 219, 0.92); }
-.overlay-launch:focus-visible { outline: 3px solid rgba(238, 107, 59, 0.22); outline-offset: 2px; }
+.settings-launch {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--muted);
+}
+
+.overlay-launch:hover,
+.settings-launch:hover { background: rgba(255, 231, 219, 0.92); }
+.overlay-launch:focus-visible,
+.settings-launch:focus-visible { outline: 3px solid rgba(238, 107, 59, 0.22); outline-offset: 2px; }
+
+.settings-dialog {
+  width: min(470px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid rgba(35, 44, 34, 0.14);
+  border-radius: 24px;
+  background: #fbfaf7;
+  color: var(--ink);
+  box-shadow: 0 30px 90px rgba(25, 29, 24, 0.28);
+}
+
+.settings-dialog::backdrop {
+  background: rgba(31, 36, 31, 0.38);
+  backdrop-filter: blur(5px);
+}
+
+.settings-dialog form { padding: 26px; }
+
+.settings-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.settings-heading .eyebrow { margin-bottom: 5px; }
+.settings-heading h2 { margin: 0; font-size: 24px; letter-spacing: -0.035em; }
+
+.dialog-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 21px;
+}
+
+.settings-copy { margin: 16px 0 20px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+
+.settings-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 0;
+  border-top: 1px solid var(--line);
+}
+
+.settings-field span { display: grid; gap: 3px; }
+.settings-field strong { font-size: 13px; }
+.settings-field small { color: var(--muted); font-size: 11px; }
+.settings-field select {
+  min-width: 105px;
+  padding: 8px 32px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+  color: var(--ink);
+}
+
+.settings-readonly kbd { width: auto; min-width: 58px; padding: 0 9px; font-size: 13px; }
+.settings-feedback { min-height: 18px; margin: 8px 0 0; color: var(--green); font-size: 11px; }
+.settings-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.settings-actions button {
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.secondary-button { background: white; color: var(--muted); }
+.primary-button { border-color: var(--accent) !important; background: var(--accent); color: white; }
 
 .brand {
   display: inline-flex;

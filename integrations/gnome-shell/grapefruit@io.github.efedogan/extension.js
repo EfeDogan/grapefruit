@@ -15,6 +15,12 @@ const DRAG_THRESHOLD_PX = 8;
 const OVERLAY_TITLE = 'Grapefruit Quick Menu';
 const POSITION_RETRY_INTERVAL_MS = 25;
 const POSITION_RETRY_LIMIT = 20;
+const SETTINGS_RELOAD_INTERVAL_MS = 1_000;
+const SETTINGS_PATH = GLib.build_filenamev([
+    GLib.get_user_config_dir(),
+    'grapefruit',
+    'settings.json',
+]);
 
 export default class GrapefruitDragKeys extends Extension {
     enable() {
@@ -27,8 +33,11 @@ export default class GrapefruitDragKeys extends Extension {
         this._dragDistanceReached = false;
         this._buttonStartX = 0;
         this._buttonStartY = 0;
-        this._wasShiftDown = false;
-        this._wasControlDown = false;
+        this._wasConvertDown = false;
+        this._wasActionsDown = false;
+        this._convertModifier = 'shift';
+        this._actionsModifier = 'control';
+        this._loadModifierSettings();
         this._capturedEventId = global.stage.connect(
             'captured-event',
             (_actor, event) => this._onCapturedEvent(event),
@@ -37,6 +46,14 @@ export default class GrapefruitDragKeys extends Extension {
             GLib.PRIORITY_DEFAULT,
             MODIFIER_POLL_INTERVAL_MS,
             () => this._pollModifiers(),
+        );
+        this._settingsReloadId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            SETTINGS_RELOAD_INTERVAL_MS,
+            () => {
+                this._loadModifierSettings();
+                return GLib.SOURCE_CONTINUE;
+            },
         );
     }
 
@@ -48,6 +65,10 @@ export default class GrapefruitDragKeys extends Extension {
         if (this._modifierPollId) {
             GLib.source_remove(this._modifierPollId);
             this._modifierPollId = 0;
+        }
+        if (this._settingsReloadId) {
+            GLib.source_remove(this._settingsReloadId);
+            this._settingsReloadId = 0;
         }
         this._cancelHideTimer();
         this._cancelPositionTimer();
@@ -70,10 +91,16 @@ export default class GrapefruitDragKeys extends Extension {
             return Clutter.EVENT_PROPAGATE;
 
         const key = event.get_key_symbol();
-        let mode = null;
+        let modifier = null;
         if (key === Clutter.KEY_Shift_L || key === Clutter.KEY_Shift_R)
-            mode = 'convert';
+            modifier = 'shift';
         else if (key === Clutter.KEY_Control_L || key === Clutter.KEY_Control_R)
+            modifier = 'control';
+
+        let mode = null;
+        if (modifier === this._convertModifier)
+            mode = 'convert';
+        else if (modifier === this._actionsModifier)
             mode = 'actions';
 
         if (!mode)
@@ -91,14 +118,24 @@ export default class GrapefruitDragKeys extends Extension {
         const buttonDown = Boolean(state & Clutter.ModifierType.BUTTON1_MASK);
         const shiftDown = Boolean(state & Clutter.ModifierType.SHIFT_MASK);
         const controlDown = Boolean(state & Clutter.ModifierType.CONTROL_MASK);
+        const convertDown = this._modifierIsDown(
+            this._convertModifier,
+            shiftDown,
+            controlDown,
+        );
+        const actionsDown = this._modifierIsDown(
+            this._actionsModifier,
+            shiftDown,
+            controlDown,
+        );
 
         if (!buttonDown) {
             if (this._dragMenuActive)
                 this._finishDrag();
             this._buttonDown = false;
             this._dragDistanceReached = false;
-            this._wasShiftDown = false;
-            this._wasControlDown = false;
+            this._wasConvertDown = false;
+            this._wasActionsDown = false;
             return GLib.SOURCE_CONTINUE;
         }
 
@@ -115,22 +152,44 @@ export default class GrapefruitDragKeys extends Extension {
 
         let mode = null;
         if (this._dragDistanceReached) {
-            if (controlDown && !this._wasControlDown)
-                mode = 'actions';
-            else if (shiftDown && !this._wasShiftDown)
+            if (convertDown && !this._wasConvertDown)
                 mode = 'convert';
-            else if (crossedThreshold && controlDown)
+            else if (actionsDown && !this._wasActionsDown)
                 mode = 'actions';
-            else if (crossedThreshold && shiftDown)
+            else if (crossedThreshold && convertDown)
                 mode = 'convert';
+            else if (crossedThreshold && actionsDown)
+                mode = 'actions';
         }
 
-        this._wasShiftDown = shiftDown;
-        this._wasControlDown = controlDown;
+        this._wasConvertDown = convertDown;
+        this._wasActionsDown = actionsDown;
         if (mode)
             this._activateMode(mode);
 
         return GLib.SOURCE_CONTINUE;
+    }
+
+    _modifierIsDown(modifier, shiftDown, controlDown) {
+        return modifier === 'control' ? controlDown : shiftDown;
+    }
+
+    _loadModifierSettings() {
+        try {
+            const [loaded, contents] = GLib.file_get_contents(SETTINGS_PATH);
+            if (!loaded)
+                return;
+            const settings = JSON.parse(new TextDecoder().decode(contents));
+            const convert = settings.convertModifier;
+            const actions = settings.actionsModifier;
+            const valid = ['shift', 'control'];
+            if (valid.includes(convert) && valid.includes(actions) && convert !== actions) {
+                this._convertModifier = convert;
+                this._actionsModifier = actions;
+            }
+        } catch (_error) {
+            // Missing or partially-written settings fall back to Shift / Control.
+        }
     }
 
     _activateMode(mode) {
