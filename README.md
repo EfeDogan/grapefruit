@@ -6,7 +6,7 @@
 
   [![Windows installer](https://github.com/EfeDogan/grapefruit/actions/workflows/windows.yml/badge.svg)](https://github.com/EfeDogan/grapefruit/actions/workflows/windows.yml)
   [![GitHub Pages](https://github.com/EfeDogan/grapefruit/actions/workflows/pages.yml/badge.svg)](https://efedogan.github.io/grapefruit/)
-  ![Version](https://img.shields.io/badge/version-0.3.4-f06b55)
+  ![Version](https://img.shields.io/badge/version-0.3.5-f06b55)
   ![Local processing](https://img.shields.io/badge/processing-local-3f6955)
 </div>
 
@@ -55,7 +55,7 @@ global klavye kısayolu kaydedilmez.
 | --- | --- | --- |
 | GNOME / Wayland | Kullanılabilir | Gerçek dosya sürükleme, konumlandırma ve dönüşümler doğrulandı. |
 | Linux / X11 | Kod hazır | Gerçek dosya yöneticisi kabul testi bekliyor. |
-| Windows 10/11 | Preview | Masaüstü Shell seçimi ve yalnızca dosya sürüklerken çalışan Shift/Ctrl akışı yenilendi; v0.3.4 kabul testi bekliyor. |
+| Windows 10/11 | Preview | Masaüstü Shell seçimi, Shift/Ctrl akışı ve otomatik Office motoru seçimi hazır; v0.3.5 kabul testi bekliyor. |
 
 Windows kabul adımları [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md)
 dosyasındadır. Windows izleyicisi yalnızca masaüstü veya Explorer kaynaklı,
@@ -90,9 +90,9 @@ cargo run -p file-formatter-cli -- convert --to pdf rapor.docx
 
 Hazır preview paketleri:
 
-- [Windows x64 `.exe`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.4/Grapefruit_0.3.4_x64-setup.exe)
-- [Ubuntu/Debian amd64 `.deb`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.4/Grapefruit_0.3.4_amd64.deb)
-- [Sürüm notları ve SHA-256 değerleri](https://github.com/EfeDogan/grapefruit/releases/tag/v0.3.4)
+- [Windows x64 `.exe`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.5/Grapefruit_0.3.5_x64-setup.exe)
+- [Ubuntu/Debian amd64 `.deb`](https://github.com/EfeDogan/grapefruit/releases/download/v0.3.5/Grapefruit_0.3.5_amd64.deb)
+- [Sürüm notları ve SHA-256 değerleri](https://github.com/EfeDogan/grapefruit/releases/tag/v0.3.5)
 
 Linux paketi GNOME Shell ve Nautilus bütünleştirme dosyalarını sistem genelinde
 kurar. Paket, eski File Formatter uzantısını Grapefruit entegrasyonuna taşır ve
