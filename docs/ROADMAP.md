@@ -6,6 +6,9 @@
 - [x] Çoklu dosya dönüşüm planı
 - [x] Çakışmasız çıktı adlandırma
 - [x] LibreOffice adaptörü
+- [x] Windows'ta Word, PowerPoint ve Excel'i ayrı ayrı algılayan Office adaptörü
+- [x] Kurulu Office motoruna göre dönüşüm hedeflerini filtreleme ve otomatik
+  yedek motor
 - [x] Gerçek DOCX/PPTX/XLSX örnekleriyle görsel doğrulama
 - [ ] İş ilerlemesi ve iptal
 

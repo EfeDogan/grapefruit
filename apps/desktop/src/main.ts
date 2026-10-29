@@ -77,7 +77,7 @@ app.innerHTML = `
       <div class="topbar-actions">
         <button id="open-settings" class="settings-launch" type="button">Ayarlar</button>
         <button id="open-overlay" class="overlay-launch" type="button">Sistem menüsünü aç</button>
-        <div class="privacy-pill"><span></span> Yerel işleme</div>
+        <div id="processing-provider" class="privacy-pill"><span></span> Yerel işleme</div>
       </div>
     </header>
 
@@ -190,6 +190,7 @@ const actionsKey = requiredElement<HTMLElement>("#actions-key");
 const convertKeyHelp = requiredElement<HTMLElement>("#convert-key-help");
 const actionsKeyHelp = requiredElement<HTMLElement>("#actions-key-help");
 const globalStatus = requiredElement<HTMLElement>("#global-status");
+const processingProvider = requiredElement<HTMLElement>("#processing-provider");
 const selectionPreview = requiredElement<HTMLElement>("#selection-preview");
 const selectionThumbnail = requiredElement<HTMLImageElement>("#selection-thumbnail");
 const selectionExtension = requiredElement<HTMLElement>("#selection-extension");
@@ -310,6 +311,7 @@ if (runningInTauri) {
   });
 
   applyModifierSettings(await invoke<ModifierSettings>("get_modifier_settings"));
+  renderOfficeProviders(await invoke<string[]>("office_provider_names"));
   const status = await invoke<DragIntegrationStatus>("drag_integration_status");
   renderDragIntegrationStatus(status);
   if (isOverlay) {
@@ -351,6 +353,17 @@ if (runningInTauri) {
         break;
     }
   });
+}
+
+function renderOfficeProviders(providers: string[]): void {
+  const indicator = processingProvider.querySelector("span")?.outerHTML ?? "";
+  if (providers.length === 0) {
+    processingProvider.innerHTML = `${indicator} Yerel · Office motoru yok`;
+    processingProvider.title = "Belge ve sunum dönüşümleri için LibreOffice veya Windows'ta Microsoft Office gerekir.";
+    return;
+  }
+  processingProvider.innerHTML = `${indicator} Yerel · ${providers.join(" + ")}`;
+  processingProvider.title = `Belge ve sunum dönüşümleri: ${providers.join(", ")}`;
 }
 
 async function loadExternalSelection(paths: string[]): Promise<void> {

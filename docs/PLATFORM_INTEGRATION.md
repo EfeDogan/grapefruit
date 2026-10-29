@@ -34,8 +34,10 @@ olması ve gerçek bir Shell dosya seçimi sunması zorunludur.
 Windows paketleme işi sabit URL ve SHA-256 değerleriyle FFmpeg ile Poppler'ı
 indirir ve Tauri resource olarak NSIS kurulumuna ekler. Çekirdek önce ortam
 değişkenlerini ve `PATH`'i, sonra kurulum yanındaki `tools/` dizinini arar.
-LibreOffice lisans/boyut nedeniyle paketlenmez; belge ve sunum dönüşümü için
-ayrı kurulmalıdır.
+LibreOffice lisans/boyut nedeniyle paketlenmez; Linux'ta belge ve sunum dönüşümü
+için ayrıca kurulur. Windows'ta Grapefruit kurulu LibreOffice'i veya ilgili
+Microsoft Office bileşenini otomatik algılar ve desteklenen hedefleri buna göre
+gösterir.
 
 ### Linux / GNOME
 

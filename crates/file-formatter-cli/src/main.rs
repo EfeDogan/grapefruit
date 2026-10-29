@@ -3,9 +3,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 
-use file_formatter_core::{
-    ConversionEngine, LibreOfficeConverter, TargetFormat, plan_conversion, supported_targets,
-};
+use file_formatter_core::{ConversionEngine, LibreOfficeConverter, TargetFormat, plan_conversion};
 
 fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
@@ -35,10 +33,17 @@ fn run(arguments: Vec<String>) -> Result<(), String> {
 }
 
 fn doctor() -> Result<(), String> {
-    let converter = LibreOfficeConverter::discover().map_err(|error| error.to_string())?;
-    let version = converter.version().map_err(|error| error.to_string())?;
-    println!("LibreOffice: {version}");
-    println!("Executable: {}", converter.executable().display());
+    let engine = ConversionEngine::discover();
+    let providers = engine.office_provider_names();
+    if providers.is_empty() {
+        return Err("no compatible office conversion provider was found".to_owned());
+    }
+    println!("Office providers: {}", providers.join(", "));
+    if let Ok(converter) = LibreOfficeConverter::discover() {
+        let version = converter.version().map_err(|error| error.to_string())?;
+        println!("LibreOffice: {version}");
+        println!("Executable: {}", converter.executable().display());
+    }
     Ok(())
 }
 
@@ -47,9 +52,10 @@ fn capabilities(arguments: &[String]) -> Result<(), String> {
         return Err("capabilities requires at least one file".to_owned());
     }
 
+    let engine = ConversionEngine::discover();
     for argument in arguments {
         let path = PathBuf::from(argument);
-        let targets = supported_targets(&path);
+        let targets = engine.supported_targets(&path);
         let targets = if targets.is_empty() {
             "none".to_owned()
         } else {

@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use file_formatter_core::{
     ConversionEngine, FileKind, TargetFormat, TransferOperation, execute_transfer, file_kind,
-    plan_conversion, plan_transfer, supported_targets,
+    plan_conversion, plan_transfer,
 };
 use serde::{Deserialize, Serialize};
 use tauri::Manager as _;
@@ -69,12 +69,23 @@ struct TransferResponse {
 }
 
 #[tauri::command]
+fn office_provider_names() -> Vec<String> {
+    ConversionEngine::discover()
+        .office_provider_names()
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[tauri::command]
 fn analyze_files(paths: Vec<String>) -> AnalyzeResponse {
+    let engine = ConversionEngine::discover();
     let files = paths
         .into_iter()
         .map(|path| {
             let file_path = PathBuf::from(&path);
-            let targets = supported_targets(&file_path)
+            let targets = engine
+                .supported_targets(&file_path)
                 .into_iter()
                 .map(|target| target.to_string())
                 .collect();
@@ -350,6 +361,7 @@ pub fn run() {
             current_overlay_mode,
             current_overlay_selection,
             drag_integration_status,
+            office_provider_names,
             get_modifier_settings,
             set_modifier_settings
         ])

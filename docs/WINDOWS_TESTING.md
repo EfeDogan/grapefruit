@@ -27,13 +27,20 @@ Bu kontrol listesi gerçek Windows Explorer ve kurulmuş NSIS paketi üzerinde
 - Ses içeren bir videoyu WebM, GIF ve MP3'e dönüştürün.
 - Bir PDF'i PNG ve TXT'ye dönüştürün. Bu üç grup, kurulumla gelen FFmpeg ve
   Poppler'ı kullanmalı; ayrıca PATH ayarı gerektirmemelidir.
-- LibreOffice kuruluysa DOCX → PDF ve PPTX → PDF/PNG deneyin. LibreOffice kurulu
-  değilse belge ve sunum dönüşümünün anlaşılır bir araç-bulunamadı hatası vermesi
-  beklenir.
+- Yalnızca LibreOffice kurulu sistemde TXT → DOCX, DOCX → PDF ve PPTX → PDF/PNG
+  deneyin.
+- Yalnızca Microsoft Office kurulu sistemde Word ile TXT → DOCX ve DOCX → PDF,
+  PowerPoint ile PPTX → PDF/PNG, Excel ile XLSX → PDF deneyin. Kurulu olmayan
+  Office bileşenlerine ait hedefler çemberde görünmemelidir.
+- LibreOffice ve Microsoft Office birlikte kuruluysa aynı TXT → DOCX dönüşümünü
+  deneyin. Varsayılan motor başarısız olduğunda Grapefruit uyumlu ikinci motora
+  geçebilmelidir.
+- Uyumlu hiçbir Office motoru yoksa belge, sunum ve tablo dönüşüm hedefleri
+  çemberde görünmemelidir; görsel, video ve PDF işlemleri çalışmaya devam etmelidir.
 - Aynı dönüşümü iki kez yapın; ikinci çıktı var olan dosyanın üzerine yazmamalı,
   `(1)` ekli yeni ad kullanmalıdır.
-- FFmpeg, Poppler veya LibreOffice çalışırken Komut İstemi/konsol penceresi
-  açılmamalıdır.
+- FFmpeg, Poppler, LibreOffice veya Microsoft Office otomasyonu çalışırken
+  Komut İstemi/konsol penceresi açılmamalıdır.
 
 ## Dosya işlemleri
 

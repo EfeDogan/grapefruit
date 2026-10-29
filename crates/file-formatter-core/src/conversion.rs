@@ -193,6 +193,11 @@ pub enum ConversionError {
         stderr: String,
         stdout: String,
     },
+    OfficeProvidersFailed {
+        input: PathBuf,
+        target: TargetFormat,
+        attempts: Vec<String>,
+    },
     NoAudioStream(PathBuf),
     OutputNotProduced {
         input: PathBuf,
@@ -264,6 +269,16 @@ impl fmt::Display for ConversionError {
                 status,
                 stdout.trim(),
                 stderr.trim()
+            ),
+            Self::OfficeProvidersFailed {
+                input,
+                target,
+                attempts,
+            } => write!(
+                formatter,
+                "all installed office providers failed to convert {} to {target}:\n{}",
+                input.display(),
+                attempts.join("\n")
             ),
             Self::NoAudioStream(path) => write!(
                 formatter,
@@ -457,10 +472,78 @@ pub fn plan_pdf_conversion(
 
 #[derive(Debug, Clone, Default)]
 pub struct ConversionEngine {
-    libreoffice: Option<PathBuf>,
+    office_backends: Vec<OfficeBackend>,
     ffmpeg: Option<PathBuf>,
     pdftoppm: Option<PathBuf>,
     pdftotext: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+enum OfficeBackend {
+    LibreOffice(PathBuf),
+    #[cfg(target_os = "windows")]
+    MicrosoftOffice(MicrosoftOfficeBackend),
+}
+
+impl OfficeBackend {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::LibreOffice(_) => "LibreOffice",
+            #[cfg(target_os = "windows")]
+            Self::MicrosoftOffice(_) => "Microsoft Office",
+        }
+    }
+
+    fn supports(&self, input: &Path, target: TargetFormat) -> bool {
+        #[cfg(not(target_os = "windows"))]
+        let _ = target;
+        match self {
+            Self::LibreOffice(_) => matches!(
+                file_kind(input),
+                FileKind::TextDocument | FileKind::Presentation | FileKind::Spreadsheet
+            ),
+            #[cfg(target_os = "windows")]
+            Self::MicrosoftOffice(office) => office.supports(input, target),
+        }
+    }
+
+    fn convert_single(&self, job: &ConversionJob) -> Result<PathBuf, ConversionError> {
+        match self {
+            Self::LibreOffice(executable) => convert_with_libreoffice(executable, job),
+            #[cfg(target_os = "windows")]
+            Self::MicrosoftOffice(office) => convert_with_microsoft_office(office, job),
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone)]
+struct MicrosoftOfficeBackend {
+    powershell: PathBuf,
+    word: bool,
+    powerpoint: bool,
+    excel: bool,
+}
+
+#[cfg(target_os = "windows")]
+impl MicrosoftOfficeBackend {
+    fn supports(&self, input: &Path, target: TargetFormat) -> bool {
+        let Some((application, _)) = microsoft_office_format(input, target) else {
+            return matches!(
+                (file_kind(input), target),
+                (
+                    FileKind::Presentation,
+                    TargetFormat::Png | TargetFormat::Jpg
+                )
+            ) && self.powerpoint;
+        };
+        match application {
+            "word" => self.word,
+            "powerpoint" => self.powerpoint,
+            "excel" => self.excel,
+            _ => false,
+        }
+    }
 }
 
 impl ConversionEngine {
@@ -468,8 +551,17 @@ impl ConversionEngine {
         let ffmpeg_fallbacks = bundled_tool_fallbacks(&["tools/ffmpeg/ffmpeg.exe"]);
         let pdftoppm_fallbacks = bundled_tool_fallbacks(&["tools/poppler/bin/pdftoppm.exe"]);
         let pdftotext_fallbacks = bundled_tool_fallbacks(&["tools/poppler/bin/pdftotext.exe"]);
+        let mut office_backends = Vec::new();
+        if let Some(executable) = discover_libreoffice() {
+            office_backends.push(OfficeBackend::LibreOffice(executable));
+        }
+        #[cfg(target_os = "windows")]
+        if let Some(office) = discover_microsoft_office() {
+            office_backends.push(OfficeBackend::MicrosoftOffice(office));
+        }
+        prefer_configured_office_provider(&mut office_backends);
         Self {
-            libreoffice: discover_libreoffice(),
+            office_backends,
             ffmpeg: discover_tool("FILE_FORMATTER_FFMPEG", &["ffmpeg"], &ffmpeg_fallbacks),
             pdftoppm: discover_tool(
                 "FILE_FORMATTER_PDFTOPPM",
@@ -482,6 +574,52 @@ impl ConversionEngine {
                 &pdftotext_fallbacks,
             ),
         }
+    }
+
+    pub fn office_provider_names(&self) -> Vec<&'static str> {
+        let mut names = Vec::new();
+        for backend in &self.office_backends {
+            match backend {
+                OfficeBackend::LibreOffice(_) => names.push("LibreOffice"),
+                #[cfg(target_os = "windows")]
+                OfficeBackend::MicrosoftOffice(office) => {
+                    if office.word {
+                        names.push("Microsoft Word");
+                    }
+                    if office.powerpoint {
+                        names.push("Microsoft PowerPoint");
+                    }
+                    if office.excel {
+                        names.push("Microsoft Excel");
+                    }
+                }
+            }
+        }
+        names
+    }
+
+    pub fn supported_targets(&self, path: &Path) -> Vec<TargetFormat> {
+        supported_targets(path)
+            .into_iter()
+            .filter(|target| match file_kind(path) {
+                FileKind::TextDocument | FileKind::Spreadsheet => self
+                    .office_backends
+                    .iter()
+                    .any(|backend| backend.supports(path, *target)),
+                FileKind::Presentation => {
+                    let office_support = self
+                        .office_backends
+                        .iter()
+                        .any(|backend| backend.supports(path, *target));
+                    if matches!(target, TargetFormat::Png | TargetFormat::Jpg) {
+                        office_support && self.pdftoppm.is_some()
+                    } else {
+                        office_support
+                    }
+                }
+                _ => true,
+            })
+            .collect()
     }
 
     pub fn execute(&self, plan: &ConversionPlan) -> Result<Vec<PathBuf>, ConversionError> {
@@ -503,7 +641,7 @@ impl ConversionEngine {
                 self.presentation_to_images(job)
             }
             (FileKind::TextDocument | FileKind::Presentation | FileKind::Spreadsheet, _) => {
-                self.libreoffice_single(job)
+                self.office_single(job)
             }
             _ => Err(ConversionError::UnsupportedTarget {
                 input: job.input.clone(),
@@ -516,11 +654,6 @@ impl ConversionEngine {
         self.ffmpeg
             .as_deref()
             .ok_or(ConversionError::ToolNotFound("FFmpeg"))
-    }
-    fn libreoffice(&self) -> Result<&Path, ConversionError> {
-        self.libreoffice
-            .as_deref()
-            .ok_or(ConversionError::ToolNotFound("LibreOffice"))
     }
     fn pdftoppm(&self) -> Result<&Path, ConversionError> {
         self.pdftoppm
@@ -641,17 +774,16 @@ impl ConversionEngine {
         let staging =
             unique_staging_directory(job.output.parent().unwrap_or_else(|| Path::new(".")));
         let result = (|| {
-            let generated_dir = staging.join("office");
-            fs::create_dir_all(&generated_dir).map_err(|error| {
-                ConversionError::OutputDirectoryUnavailable(generated_dir.clone(), error)
+            let office_dir = staging.join("office");
+            fs::create_dir_all(&office_dir).map_err(|error| {
+                ConversionError::OutputDirectoryUnavailable(office_dir.clone(), error)
             })?;
-            let pdf = run_libreoffice(
-                self.libreoffice()?,
-                &job.input,
-                TargetFormat::Pdf,
-                &staging,
-                &generated_dir,
-            )?;
+            let pdf_job = ConversionJob {
+                input: job.input.clone(),
+                output: office_dir.join("presentation.pdf"),
+                target: TargetFormat::Pdf,
+            };
+            let pdf = self.convert_with_office_provider(&pdf_job)?;
             let raster_dir = staging.join("pages");
             fs::create_dir_all(&raster_dir).map_err(|error| {
                 ConversionError::OutputDirectoryUnavailable(raster_dir.clone(), error)
@@ -663,8 +795,38 @@ impl ConversionEngine {
         result
     }
 
-    fn libreoffice_single(&self, job: &ConversionJob) -> Result<Vec<PathBuf>, ConversionError> {
-        convert_with_libreoffice(self.libreoffice()?, job).map(|path| vec![path])
+    fn office_single(&self, job: &ConversionJob) -> Result<Vec<PathBuf>, ConversionError> {
+        self.convert_with_office_provider(job)
+            .map(|path| vec![path])
+    }
+
+    fn convert_with_office_provider(
+        &self,
+        job: &ConversionJob,
+    ) -> Result<PathBuf, ConversionError> {
+        let candidates = self
+            .office_backends
+            .iter()
+            .filter(|backend| backend.supports(&job.input, job.target))
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
+            return Err(ConversionError::ToolNotFound(
+                "a compatible LibreOffice or Microsoft Office component",
+            ));
+        }
+
+        let mut attempts = Vec::with_capacity(candidates.len());
+        for backend in candidates {
+            match backend.convert_single(job) {
+                Ok(output) => return Ok(output),
+                Err(error) => attempts.push(format!("{}: {error}", backend.name())),
+            }
+        }
+        Err(ConversionError::OfficeProvidersFailed {
+            input: job.input.clone(),
+            target: job.target,
+            attempts,
+        })
     }
 }
 
@@ -766,9 +928,148 @@ fn run_libreoffice(
 
 fn libreoffice_filter(target: TargetFormat) -> &'static str {
     match target {
+        TargetFormat::Docx => "docx:Office Open XML Text",
+        TargetFormat::Odt => "odt:writer8",
         TargetFormat::Html => "html:XHTML Writer File:UTF8",
         TargetFormat::Txt => "txt:Text (encoded):UTF8",
+        TargetFormat::Epub => "epub:EPUB",
+        TargetFormat::Pptx => "pptx:Impress MS PowerPoint 2007 XML",
+        TargetFormat::Odp => "odp:impress8",
         _ => target.extension(),
+    }
+}
+
+#[cfg(target_os = "windows")]
+const MICROSOFT_OFFICE_CONVERTER: &str = r#"
+$ErrorActionPreference = 'Stop'
+$sourcePath = [Environment]::GetEnvironmentVariable('GRAPEFRUIT_OFFICE_INPUT', 'Process')
+$outputPath = [Environment]::GetEnvironmentVariable('GRAPEFRUIT_OFFICE_OUTPUT', 'Process')
+$applicationName = [Environment]::GetEnvironmentVariable('GRAPEFRUIT_OFFICE_APPLICATION', 'Process')
+$format = [int][Environment]::GetEnvironmentVariable('GRAPEFRUIT_OFFICE_FORMAT', 'Process')
+$application = $null
+$document = $null
+try {
+    switch ($applicationName) {
+        'word' {
+            $application = New-Object -ComObject Word.Application
+            $application.Visible = $false
+            $application.DisplayAlerts = 0
+            $application.AutomationSecurity = 3
+            $document = $application.Documents.Open($sourcePath, $false, $true)
+            $document.SaveAs2($outputPath, $format, $false, '', $false)
+        }
+        'powerpoint' {
+            $application = New-Object -ComObject PowerPoint.Application
+            $application.DisplayAlerts = 1
+            $application.AutomationSecurity = 3
+            $document = $application.Presentations.Open($sourcePath, $true, $false, $false)
+            $document.SaveAs($outputPath, $format)
+        }
+        'excel' {
+            $application = New-Object -ComObject Excel.Application
+            $application.Visible = $false
+            $application.DisplayAlerts = $false
+            $application.AutomationSecurity = 3
+            $document = $application.Workbooks.Open($sourcePath, 0, $true)
+            $document.ExportAsFixedFormat(0, $outputPath, 0, $true, $false, [Type]::Missing, [Type]::Missing, $false)
+        }
+        default { throw "Unsupported Microsoft Office application: $applicationName" }
+    }
+} finally {
+    if ($null -ne $document) {
+        try {
+            if ($applicationName -eq 'powerpoint') {
+                $document.Close()
+            } else {
+                $document.Close($false)
+            }
+        } catch {}
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($document)
+    }
+    if ($null -ne $application) {
+        try { $application.Quit() } catch {}
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($application)
+    }
+    [GC]::Collect()
+    [GC]::WaitForPendingFinalizers()
+}
+if (-not (Test-Path -LiteralPath $outputPath -PathType Leaf)) {
+    throw "Microsoft Office completed without creating the expected output: $outputPath"
+}
+"#;
+
+#[cfg(target_os = "windows")]
+fn convert_with_microsoft_office(
+    office: &MicrosoftOfficeBackend,
+    job: &ConversionJob,
+) -> Result<PathBuf, ConversionError> {
+    let (application, format) =
+        microsoft_office_format(&job.input, job.target).ok_or_else(|| {
+            ConversionError::UnsupportedTarget {
+                input: job.input.clone(),
+                target: job.target,
+            }
+        })?;
+    let staging = unique_staging_directory(job.output.parent().unwrap_or_else(|| Path::new(".")));
+    let result = (|| {
+        fs::create_dir_all(&staging)
+            .map_err(|error| ConversionError::OutputDirectoryUnavailable(staging.clone(), error))?;
+        let generated = staging.join(format!("output.{}", job.target.extension()));
+        let script = staging.join("convert.ps1");
+        fs::write(&script, MICROSOFT_OFFICE_CONVERTER).map_err(|source| {
+            ConversionError::ToolLaunch {
+                tool: "Microsoft Office automation",
+                source,
+            }
+        })?;
+        let output = background_command(&office.powershell)
+            .args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+            ])
+            .arg(&script)
+            .env("GRAPEFRUIT_OFFICE_INPUT", &job.input)
+            .env("GRAPEFRUIT_OFFICE_OUTPUT", &generated)
+            .env("GRAPEFRUIT_OFFICE_APPLICATION", application)
+            .env("GRAPEFRUIT_OFFICE_FORMAT", format.to_string())
+            .output()
+            .map_err(|source| ConversionError::ToolLaunch {
+                tool: "Microsoft Office automation",
+                source,
+            })?;
+        ensure_tool_success("Microsoft Office automation", &job.input, &output)?;
+        ensure_generated(&job.input, &generated, &output)?;
+        finalize_single(&generated, &job.output)
+    })();
+    let _ = fs::remove_dir_all(&staging);
+    result
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn microsoft_office_format(input: &Path, target: TargetFormat) -> Option<(&'static str, i32)> {
+    if file_kind(input) == FileKind::TextDocument
+        && !matches!(
+            normalized_extension(input).as_deref(),
+            Some("doc" | "docx" | "odt" | "rtf" | "txt" | "html" | "htm")
+        )
+    {
+        return None;
+    }
+    match (file_kind(input), target) {
+        (FileKind::TextDocument, TargetFormat::Pdf) => Some(("word", 17)),
+        (FileKind::TextDocument, TargetFormat::Docx) => Some(("word", 16)),
+        (FileKind::TextDocument, TargetFormat::Odt) => Some(("word", 23)),
+        (FileKind::TextDocument, TargetFormat::Txt) => Some(("word", 7)),
+        (FileKind::TextDocument, TargetFormat::Html) => Some(("word", 10)),
+        (FileKind::Presentation, TargetFormat::Pdf) => Some(("powerpoint", 32)),
+        (FileKind::Presentation, TargetFormat::Pptx) => Some(("powerpoint", 24)),
+        (FileKind::Presentation, TargetFormat::Odp) => Some(("powerpoint", 35)),
+        (FileKind::Spreadsheet, TargetFormat::Pdf) => Some(("excel", 0)),
+        _ => None,
     }
 }
 
@@ -1177,6 +1478,55 @@ pub fn discover_libreoffice() -> Option<PathBuf> {
     )
 }
 
+fn prefer_configured_office_provider(backends: &mut [OfficeBackend]) {
+    let Some(preferred) = env::var_os("GRAPEFRUIT_OFFICE_PROVIDER") else {
+        return;
+    };
+    let preferred = preferred.to_string_lossy().to_ascii_lowercase();
+    backends.sort_by_key(|backend| match (preferred.as_str(), backend) {
+        ("microsoft" | "microsoft-office" | "office", OfficeBackend::LibreOffice(_)) => 1,
+        ("libreoffice" | "libre", OfficeBackend::LibreOffice(_)) => 0,
+        #[cfg(target_os = "windows")]
+        ("microsoft" | "microsoft-office" | "office", OfficeBackend::MicrosoftOffice(_)) => 0,
+        #[cfg(target_os = "windows")]
+        ("libreoffice" | "libre", OfficeBackend::MicrosoftOffice(_)) => 1,
+        _ => 0,
+    });
+}
+
+#[cfg(target_os = "windows")]
+fn discover_microsoft_office() -> Option<MicrosoftOfficeBackend> {
+    let mut fallbacks = Vec::new();
+    if let Some(system_root) = env::var_os("SystemRoot") {
+        fallbacks.push(
+            PathBuf::from(system_root)
+                .join("System32")
+                .join("WindowsPowerShell")
+                .join("v1.0")
+                .join("powershell.exe"),
+        );
+    }
+    let powershell = discover_tool("FILE_FORMATTER_POWERSHELL", &["powershell"], &fallbacks)?;
+    let backend = MicrosoftOfficeBackend {
+        powershell,
+        word: registry_class_registered("Word.Application"),
+        powerpoint: registry_class_registered("PowerPoint.Application"),
+        excel: registry_class_registered("Excel.Application"),
+    };
+    (backend.word || backend.powerpoint || backend.excel).then_some(backend)
+}
+
+#[cfg(target_os = "windows")]
+fn registry_class_registered(programmatic_id: &str) -> bool {
+    let key = format!(r"HKCR\{programmatic_id}\CLSID");
+    ["/reg:64", "/reg:32"].into_iter().any(|registry_view| {
+        background_command("reg.exe")
+            .args(["query", &key, registry_view])
+            .output()
+            .is_ok_and(|output| output.status.success())
+    })
+}
+
 fn discover_tool(variable: &str, names: &[&str], fallbacks: &[PathBuf]) -> Option<PathBuf> {
     if let Some(configured) = env::var_os(variable) {
         let configured = PathBuf::from(configured);
@@ -1311,6 +1661,45 @@ mod tests {
         assert!(!targets.contains(&TargetFormat::Png));
         assert!(targets.contains(&TargetFormat::Jpg));
         assert!(targets.contains(&TargetFormat::Pdf));
+    }
+
+    #[test]
+    fn hides_office_targets_when_no_compatible_provider_is_installed() {
+        let engine = ConversionEngine::default();
+        assert!(engine.supported_targets(Path::new("notes.txt")).is_empty());
+        assert!(!engine.supported_targets(Path::new("photo.png")).is_empty());
+    }
+
+    #[test]
+    fn exposes_document_targets_when_libreoffice_is_available() {
+        let engine = ConversionEngine {
+            office_backends: vec![OfficeBackend::LibreOffice(PathBuf::from("soffice"))],
+            ..ConversionEngine::default()
+        };
+        let targets = engine.supported_targets(Path::new("notes.txt"));
+        assert_eq!(engine.office_provider_names(), vec!["LibreOffice"]);
+        assert!(targets.contains(&TargetFormat::Docx));
+        assert!(targets.contains(&TargetFormat::Pdf));
+    }
+
+    #[test]
+    fn maps_supported_microsoft_office_conversions() {
+        assert_eq!(
+            microsoft_office_format(Path::new("notes.txt"), TargetFormat::Docx),
+            Some(("word", 16))
+        );
+        assert_eq!(
+            microsoft_office_format(Path::new("slides.pptx"), TargetFormat::Pdf),
+            Some(("powerpoint", 32))
+        );
+        assert_eq!(
+            microsoft_office_format(Path::new("sheet.xlsx"), TargetFormat::Pdf),
+            Some(("excel", 0))
+        );
+        assert_eq!(
+            microsoft_office_format(Path::new("notes.md"), TargetFormat::Docx),
+            None
+        );
     }
 
     #[test]

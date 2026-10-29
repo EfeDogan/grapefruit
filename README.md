@@ -68,6 +68,8 @@ Gereksinimler:
 - Rust stable
 - Node.js 22 ve pnpm 10
 - Linux için FFmpeg, Poppler ve LibreOffice
+- Windows belge dönüşümleri için LibreOffice **veya** ilgili Microsoft Office
+  uygulaması (Word, PowerPoint ya da Excel)
 - Tauri'nin platform bağımlılıkları
 
 ```bash
@@ -107,8 +109,19 @@ pnpm --dir apps/desktop install --frozen-lockfile
 pnpm --dir apps/desktop tauri build --bundles nsis
 ```
 
-FFmpeg ve Poppler Windows paketine dahil edilir. Belge ve sunum dönüşümleri için
-LibreOffice'in Windows'ta ayrıca kurulu olması gerekir.
+FFmpeg ve Poppler Windows paketine dahil edilir. Grapefruit belge ve sunum
+dönüşümleri için kurulu motorları başlangıçta otomatik algılar:
+
+- LibreOffice varsa bütün desteklenen belge, sunum ve tablo hedeflerinde kullanılır.
+- Windows'ta Word, PowerPoint ve Excel ayrı ayrı algılanır; ilgili dosya ailesinde
+  Microsoft Office otomasyonu kullanılır.
+- İki motor da varsa önce LibreOffice denenir, başarısız olursa uyumlu Microsoft
+  Office uygulamasına geçilir.
+
+ONLYOFFICE Desktop Editors'ın belgelenmiş komut satırı seçenekleri yerel ve
+etkileşimsiz bir “farklı kaydet” dönüşümü sunmadığı için yalnızca masaüstü
+uygulamasının kurulu olması şu anda dönüşüm motoru sayılmaz. Ayrı ONLYOFFICE
+Document Builder/Docs kurulumu ileride bağımsız bir adaptör olarak eklenebilir.
 
 ### Farklı araç yolları
 
@@ -119,7 +132,12 @@ FILE_FORMATTER_LIBREOFFICE=/özel/yol/soffice
 FILE_FORMATTER_FFMPEG=/özel/yol/ffmpeg
 FILE_FORMATTER_PDFTOPPM=/özel/yol/pdftoppm
 FILE_FORMATTER_PDFTOTEXT=/özel/yol/pdftotext
+FILE_FORMATTER_POWERSHELL=C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+GRAPEFRUIT_OFFICE_PROVIDER=microsoft
 ```
+
+`GRAPEFRUIT_OFFICE_PROVIDER` değeri `microsoft` veya `libreoffice` olabilir ve
+yalnızca iki motorun da bulunduğu Windows sistemlerinde deneme sırasını değiştirir.
 
 ## Mimari
 
@@ -142,6 +160,8 @@ planlanan işler için [docs/ROADMAP.md](docs/ROADMAP.md) dosyasına bakın.
 - Geçici çıktılar sistem geçici dizininde hazırlanır; yalnızca tamamlanan dosya hedefe taşınır.
 - Bir klasörün kendi içine kopyalanması veya taşınması reddedilir.
 - Her LibreOffice işi yalıtılmış kullanıcı profili kullanır.
+- Microsoft Office belgeleri salt okunur açılır; makrolar kapatılır ve çıktı
+  geçici klasörde tamamlanmadan hedef konuma taşınmaz.
 
 ## Testler
 
