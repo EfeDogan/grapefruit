@@ -375,14 +375,11 @@ mod tests {
 
     #[test]
     fn reports_common_targets_for_compatible_selections() {
-        let response = analyze_files(vec!["report.docx".into(), "slides.pptx".into()]);
-        assert_eq!(response.common_targets, vec!["pdf"]);
-
-        let mixed = analyze_files(vec!["report.docx".into(), "photo.png".into()]);
-        assert_eq!(mixed.common_targets, vec!["pdf"]);
-
         let images = analyze_files(vec!["photo.png".into(), "scan.jpg".into()]);
         assert!(images.common_targets.contains(&"webp".to_owned()));
         assert!(images.common_targets.contains(&"pdf".to_owned()));
+
+        let mixed = analyze_files(vec!["photo.png".into(), "clip.mp4".into()]);
+        assert!(mixed.common_targets.is_empty());
     }
 }
